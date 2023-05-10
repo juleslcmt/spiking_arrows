@@ -40,54 +40,40 @@ rf_model = create_custom_neuron_class("RF", param_names=["Damp", "Omega"],
 
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
-rf_params = {"Damp": 2.5, "Omega": 1.1 * np.pi * 2.0}
+rf_excitatory_params = {"Damp": 2.5, "Omega": 2.0 * np.pi * 2.0}
+rf_inhibitory_params = {"Damp": 2.5, "Omega": 3.0 * np.pi * 2.0}
 rf_init = {"V": 0.0, "U": 0.0}
 output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
                  'Ioffset': 0}
 output_init = {'RefracTime': 0, 'V': -65}
 
-# Testing input layer
-#spike_times_1 = [1.1 * 2 * np.pi * i for i in range(15)]
-#spike_times_2 = [(0.7 * np.pi * i) for i in range(15)]
-# list of sorted spike times for each neurons where t_1_2 is the time of the second spike you want the first neuron to emit
-#spike_times = [[] for i in range(height * width)]
-#spiking_neurons = [5, 27]
-#spike_times[5] = spike_times_1
-#spike_times[27] = spike_times_2
-
-# count how many spikes each neuron will emit
-#spikes_per_neuron = [len(n) for n in spike_times]
-# calculate cumulative sum i.e. index of the END of each neuron's block of spikes
-#end_spikes = [int(np.sum(spikes_per_neuron[:i + 1])) if i in spiking_neurons else 0 for i in range(height * width)]
-# np.cumsum(spikes_per_neuron)
-
-# from these get index of START of each neurons block of spikes
-#start_spikes = [0 for _ in range(height * width)]
-#start_spikes[27] = end_spikes[5]
-
-#input_pop = model.add_neuron_population("Input", height * width, "SpikeSourceArray", {},
-#                                        {"startSpike": start_spikes, "endSpike": end_spikes})
-#input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times))
-#input_pop.spike_recording_enabled = True
-
 # Network architecture
-excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, rf_model, rf_params, rf_init)
-inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, rf_model, rf_params, rf_init)
+excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, rf_model, rf_excitatory_params, rf_init)
+excitatory_pop.spike_recording_enabled = True
+inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, rf_model, rf_inhibitory_params, rf_init)
+inhibitory_pop.spike_recording_enabled = True
+
 up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, output_init)
 down_neuron = model.add_neuron_population('down_neuron', 1, "LIF", output_params, output_init)
 left_neuron = model.add_neuron_population('left_neuron', 1, "LIF", output_params, output_init)
 right_neuron = model.add_neuron_population('right_neuron', 1, "LIF", output_params, output_init)
 up_neuron.spike_recording_enabled = True
 
-# input to RF neurons
+# Input to excitatory and inhibitory matrices
 # TODO g value was added randomly
-model.add_synapse_population("InputNeuron", "SPARSE_GLOBALG", 0,
+model.add_synapse_population("input_excitatory", "SPARSE_GLOBALG", 0,
                              DVS_pop, excitatory_pop,
                              "StaticPulse", {}, {"g": 70.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
+                             
+model.add_synapse_population("input_inhibitory", "SPARSE_GLOBALG", 0,
+                             DVS_pop, inhibitory_pop,
+                             "StaticPulse", {}, {"g": 70.0}, {}, {},
+                             "DeltaCurr", {}, {},
+                             init_connectivity("OneToOne", {}))
 
-# - Weight matrices -
+# Weight matrices
 height_up_weight_vector = np.linspace(1, 0, height)
 height_up_weight_matrix = np.tile(height_up_weight_vector, (width, 1)).T.reshape((height * width,))
 height_down_weight_vector = np.linspace(0, 1, height)
@@ -97,9 +83,15 @@ width_right_weight_matrix = np.tile(width_right_weight_vector, (1, height)).T.re
 width_left_weight_vector = np.linspace(1, 0, width)
 width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.reshape((height * width, 1))
 
+# Excitatory and inhibitory matrices to directional neurons
 model.add_synapse_population("excitatory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              excitatory_pop, up_neuron,
                              "StaticPulse", {}, {"g": height_up_weight_matrix}, {}, {},
+                             "DeltaCurr", {}, {})
+                             
+model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
+                             inhibitory_pop, up_neuron,
+                             "StaticPulse", {}, {"g": -1 * height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
 model.build()
@@ -107,34 +99,6 @@ model.load(num_recording_timesteps=2000)
 
 v_view = up_neuron.vars["V"].view
 v = []
-# while model.t < 200.0:
-#     model.step_time()
-#     up_neuron.pull_var_from_device("V")
-#     v.append(v_view[0])
-
-    # if model.t % check_time == 0:
-    #     model.pull_recording_buffers_from_device()
-    #     directional_spikes, _ = up_neuron.spike_recording_data
-    #     print(directional_spikes)
-
-# model.pull_recording_buffers_from_device()
-
-# up_spike_times, _ = up_neuron.spike_recording_data
-
-# timesteps = np.arange(0.0, 200.0, 0.1)
-
-# # Create figure with 4 axes
-# fig, axis = plt.subplots()
-# axis.plot(timesteps, v)
-# axis.vlines(up_spike_times, ymin=0, ymax=2, color="red", linestyle="--", label="UP")
-# axis.set_xlabel("time [ms]")
-# axis.set_ylabel("V [mV]")
-# axis.legend()
-
-# axis.set_ylim((0, 2))
-# axis.set_ylim((0, 2))
-
-# plt.show()
 
 # Connect to a USB camera, receiving tensors of shape (640, 480)
 # By default, we send the tensors to the CPU
@@ -151,12 +115,16 @@ with USBInput((height, width), device="genn") as stream:
             v.append(v_view[0])
         
         model.pull_recording_buffers_from_device()
-        directional_spikes, _ = up_neuron.spike_recording_data
+        #excitatory_spike_times, excitatory_ids = excitatory_pop.spike_recording_data
+        #inhibitory_spike_times, inhibitory_ids = inhibitory_pop.spike_recording_data
+        #up_spike_times, _ = up_neuron.spike_recording_data
         spike_times, spike_ids = DVS_pop.spike_recording_data
 
+        # Plotting code from Jamie (GeNN)
         fig, axis = plt.subplots()
         spike_x = spike_ids % height
         spike_y = spike_ids // height
         axis.scatter(spike_x, spike_y, s=1)
-        # Add the plotting for our neurons...
         plt.show()
+
+    
