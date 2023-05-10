@@ -31,26 +31,31 @@ output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vres
 output_init = {'RefracTime': 0, 'V': -65}
 
 # Mapping input spikes (test)
-spike_times = [[] for i in range(height * width)]
-
-frequency_test = [[2.0 * 2 * np.pi * i for i in range(15)], [(3.0 * np.pi * i) for i in range(15)]]
+frequency_test = [[2.0 * 2 * np.pi * i for i in range(15)], [(8.0 * 2 * np.pi * i) for i in range(15)]]
 spiking_neurons = [5, 27]
-for i in range(len(frequency_test)):
-	spike_times[spiking_neurons[i]] = frequency_test[i]
-
-# count how many spikes each neuron will emit
-#spikes_per_neuron = [len(n) for n in spike_times]
-# calculate cumulative sum i.e. index of the END of each neuron's block of spikes
-#end_spikes = [int(np.sum(spikes_per_neuron[:i + 1])) if i in spiking_neurons else 0 for i in range(height * width)]
-# np.cumsum(spikes_per_neuron)
-
-# from these get index of START of each neurons block of spikes
-#start_spikes = [0 for _ in range(height * width)]
-#start_spikes[27] = end_spikes[5]
+	
+spike_times = np.concatenate(frequency_test, axis=None)
+start_spikes = []
+start_index = 0.0
+end_spikes = []
+end_index = 0.0
+j = 0
+for i in range(height * width):
+	if not i in spiking_neurons:
+		start_spikes.append(start_index)
+		end_spikes.append(end_index)
+	else:
+		start_spikes.append(start_index)
+		end_index = end_index + len(frequency_test[j])
+		end_spikes.append(end_index)
+		start_index = end_index
+		j += 1	
+#print(start_spikes)
+#print(end_spikes)
 
 input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
-input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times))
+input_pop.set_extra_global_param("spikeTimes", spike_times)
 input_pop.spike_recording_enabled = True
 
 # Network architecture
