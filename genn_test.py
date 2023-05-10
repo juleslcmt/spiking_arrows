@@ -23,8 +23,8 @@ model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
 
 # Neuron parameters
-rf_excitatory_params = {"Damp": 2.5, "Omega": 1.1 * np.pi * 2.0}
-rf_inhibitory_params = {"Damp": 2.5, "Omega": 0.7 * np.pi * 2.0}
+rf_excitatory_params = {"Damp": 2.5, "Omega": 2.0 * np.pi * 2.0}
+rf_inhibitory_params = {"Damp": 2.5, "Omega": 3.0 * np.pi * 2.0}
 rf_init = {"V": 0.0, "U": 0.0}
 output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
                  'Ioffset': 0}
@@ -33,20 +33,20 @@ output_init = {'RefracTime': 0, 'V': -65}
 # Mapping input spikes (test)
 spike_times = [[] for i in range(height * width)]
 
-frequency_test = [[1.1 * 2 * np.pi * i for i in range(15)], [(0.7 * np.pi * i) for i in range(15)]]
+frequency_test = [[2.0 * 2 * np.pi * i for i in range(15)], [(3.0 * np.pi * i) for i in range(15)]]
 spiking_neurons = [5, 27]
 for i in range(len(frequency_test)):
 	spike_times[spiking_neurons[i]] = frequency_test[i]
 
 # count how many spikes each neuron will emit
-spikes_per_neuron = [len(n) for n in spike_times]
+#spikes_per_neuron = [len(n) for n in spike_times]
 # calculate cumulative sum i.e. index of the END of each neuron's block of spikes
-end_spikes = [int(np.sum(spikes_per_neuron[:i + 1])) if i in spiking_neurons else 0 for i in range(height * width)]
+#end_spikes = [int(np.sum(spikes_per_neuron[:i + 1])) if i in spiking_neurons else 0 for i in range(height * width)]
 # np.cumsum(spikes_per_neuron)
 
 # from these get index of START of each neurons block of spikes
-start_spikes = [0 for _ in range(height * width)]
-start_spikes[27] = end_spikes[5]
+#start_spikes = [0 for _ in range(height * width)]
+#start_spikes[27] = end_spikes[5]
 
 input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
