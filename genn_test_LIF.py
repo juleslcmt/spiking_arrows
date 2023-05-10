@@ -23,63 +23,42 @@ model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
 
 # Neuron parameters
-rf_excitatory_params = {"Damp": 2.5, "Omega": 2.0 * np.pi * 2.0}
-rf_inhibitory_params = {"Damp": 2.5, "Omega": 3.0 * np.pi * 2.0}
-rf_init = {"V": 0.0, "U": 0.0}
+excitatory_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
+                 'Ioffset': 0}
+inhibitory_params = {"C": 1.0, "TauM": 1.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -47.85,
+                 'Ioffset': 0}
 output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
                  'Ioffset': 0}
-output_init = {'RefracTime': 0, 'V': -65}
+LIF_init = {'RefracTime': 0, 'V': -65}
 
 # Mapping input spikes (test)
-frequency_test = [[1/100 * i for i in range(2000)], [(8.0 * 2 * np.pi * i) for i in range(15)]]
-spiking_neurons = [5, 27]
-	
-spike_times = np.concatenate(frequency_test, axis=None)
-start_spikes = []
-start_index = 0.0
-end_spikes = []
-end_index = 0.0
-j = 0
-for i in range(height * width):
-	if not i in spiking_neurons:
-		start_spikes.append(start_index)
-		end_spikes.append(end_index)
-	else:
-		start_spikes.append(start_index)
-		end_index = end_index + len(frequency_test[j])
-		end_spikes.append(end_index)
-		start_index = end_index
-		j += 1	
-#print(start_spikes)
-#print(end_spikes)
-
-start_spikes = [0]
-start_spikes.append([15 for i in range(height*width - 1)])
-start_spikes = np.concatenate(start_spikes, axis=None)
-end_spikes = [15 for i in range(height*width)]
-input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
-                                        {"startSpike": start_spikes, "endSpike": end_spikes})
-input_pop.set_extra_global_param("spikeTimes", frequency_test[0])
-input_pop.spike_recording_enabled = True
+spike_times = [np.arange(0, 100, 1000/2000), np.arange(0, 200, 1000/3000), np.arange(100, 200, 1000/2000)] 
+len_spike_times = [len(x) for x in spike_times]
 
 start_spikes = [0 for i in range(height*width)]
-end_spikes = [[0 for i in range(height*width-1)], [15]]
-end_spikes = np.concatenate(end_spikes, axis=None)
-input_pop2 = model.add_neuron_population("input_pop2", height * width, "SpikeSourceArray", {},
+end_spikes = [0 for i in range(height*width)]
+
+end_spikes[0] = len_spike_times[0]
+start_spikes[3] = len_spike_times[0]
+end_spikes[3] = len_spike_times[0] + len_spike_times[1]
+start_spikes[width-1] = len_spike_times[0] + len_spike_times[1]
+end_spikes[width-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
+
+input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
-input_pop2.set_extra_global_param("spikeTimes", frequency_test[0])
-input_pop2.spike_recording_enabled = True
+input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times, axis=None))
+input_pop.spike_recording_enabled = True
 
 # Network architecture
-excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, "LIF", output_params, output_init)
+excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, "LIF", excitatory_params, LIF_init)
 excitatory_pop.spike_recording_enabled = True
-inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, "LIF", output_params, output_init)
+inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, "LIF", inhibitory_params, LIF_init)
 inhibitory_pop.spike_recording_enabled = True
 
-up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, output_init)
-down_neuron = model.add_neuron_population('down_neuron', 1, "LIF", output_params, output_init)
-left_neuron = model.add_neuron_population('left_neuron', 1, "LIF", output_params, output_init)
-right_neuron = model.add_neuron_population('right_neuron', 1, "LIF", output_params, output_init)
+up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, LIF_init)
+down_neuron = model.add_neuron_population('down_neuron', 1, "LIF", output_params, LIF_init)
+left_neuron = model.add_neuron_population('left_neuron', 1, "LIF", output_params, LIF_init)
+right_neuron = model.add_neuron_population('right_neuron', 1, "LIF", output_params, LIF_init)
 up_neuron.spike_recording_enabled = True
 down_neuron.spike_recording_enabled = True
 left_neuron.spike_recording_enabled = True
@@ -94,8 +73,15 @@ model.add_synapse_population("input_excitatory", "SPARSE_GLOBALG", 0,
                              init_connectivity("OneToOne", {}))
                              
 model.add_synapse_population("input_inhibitory", "SPARSE_GLOBALG", 0,
-                             input_pop2, inhibitory_pop,
+                             input_pop, inhibitory_pop,
                              "StaticPulse", {}, {"g": 70.0}, {}, {},
+                             "DeltaCurr", {}, {},
+                             init_connectivity("OneToOne", {}))
+                             
+# Inhibitory matrix inhibits excitatory matrix to filter the source point
+model.add_synapse_population("target_filter", "SPARSE_GLOBALG", 0,
+                             inhibitory_pop, excitatory_pop,
+                             "StaticPulse", {}, {"g": -1000.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
@@ -175,26 +161,30 @@ down_spike_times, _ = down_neuron.spike_recording_data
 left_spike_times, _ = left_neuron.spike_recording_data
 right_spike_times, _ = right_neuron.spike_recording_data
 
-timesteps = np.arange(0.0, 200.0, 0.1)
+timesteps = np.arange(0.0, 200.0, model.dT)
 
 # Create figure with 4 axes
 fig, axes = plt.subplots(6,1)
-axes[0].scatter(excitatory_spike_times, excitatory_ids,s=1)
+axes[0].scatter(excitatory_spike_times, excitatory_ids,s=4)
 axes[0].set_xlabel("time [ms]")
 axes[0].set_ylim((0, width*height))
-axes[1].scatter(inhibitory_spike_times, inhibitory_ids,s=1)
+axes[1].scatter(inhibitory_spike_times, inhibitory_ids,s=4)
 axes[1].set_xlabel("time [ms]")
 axes[1].set_ylim((0, width*height))
 axes[2].vlines(up_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[2].set_xlabel("time [ms]")
+axes[2].set_xlim((0, 200))
 axes[2].set_ylim((0, 4))
 axes[3].vlines(down_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[3].set_xlabel("time [ms]")
+axes[3].set_xlim((0, 200))
 axes[3].set_ylim((0, 4))
 axes[4].vlines(left_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[4].set_xlabel("time [ms]")
+axes[4].set_xlim((0, 200))
 axes[4].set_ylim((0, 4))
 axes[5].vlines(right_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[5].set_xlabel("time [ms]")
+axes[5].set_xlim((0, 200))
 axes[5].set_ylim((0, 4))
 plt.show()
