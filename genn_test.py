@@ -24,7 +24,8 @@ rf_model = create_custom_neuron_class("RF", param_names=["Damp", "Omega"],
 
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
-rf_params = {"Damp": 2.5, "Omega": 1.1 * np.pi * 2.0}
+rf_excitatory_params = {"Damp": 2.5, "Omega": 1.1 * np.pi * 2.0}
+rf_inhibitory_params = {"Damp": 2.5, "Omega": 0.7 * np.pi * 2.0}
 rf_init = {"V": 0.0, "U": 0.0}
 output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
                  'Ioffset': 0}
@@ -55,8 +56,10 @@ input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times))
 input_pop.spike_recording_enabled = True
 
 # Network architecture
-excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, rf_model, rf_params, rf_init)
-inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, rf_model, rf_params, rf_init)
+excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, rf_model, rf_excitatory_params, rf_init)
+excitatory_pop.spike_recording_enabled = True
+inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, rf_model, rf_inhibitory_params, rf_init)
+inhibitory_pop.spike_recording_enabled = True
 up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, output_init)
 down_neuron = model.add_neuron_population('down_neuron', 1, "LIF", output_params, output_init)
 left_neuron = model.add_neuron_population('left_neuron', 1, "LIF", output_params, output_init)
@@ -65,8 +68,14 @@ up_neuron.spike_recording_enabled = True
 
 # input to RF neurons
 # TODO g value was added randomly
-model.add_synapse_population("InputNeuron", "SPARSE_GLOBALG", 0,
+model.add_synapse_population("input_excitatory", "SPARSE_GLOBALG", 0,
                              input_pop, excitatory_pop,
+                             "StaticPulse", {}, {"g": 70.0}, {}, {},
+                             "DeltaCurr", {}, {},
+                             init_connectivity("OneToOne", {}))
+                             
+model.add_synapse_population("input_inhibitory", "SPARSE_GLOBALG", 0,
+                             input_pop, inhibitory_pop,
                              "StaticPulse", {}, {"g": 70.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
@@ -84,6 +93,11 @@ width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.resh
 model.add_synapse_population("excitatory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              excitatory_pop, up_neuron,
                              "StaticPulse", {}, {"g": height_up_weight_matrix}, {}, {},
+                             "DeltaCurr", {}, {})
+                             
+model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
+                             inhibitory_pop, up_neuron,
+                             "StaticPulse", {}, {"g": -1 * height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
 model.build()
@@ -103,19 +117,21 @@ while model.t < 200.0:
 
 model.pull_recording_buffers_from_device()
 
+excitatory_spike_times, excitatory_ids = excitatory_pop.spike_recording_data
+inhibitory_spike_times, inhibitory_ids = inhibitory_pop.spike_recording_data
 up_spike_times, _ = up_neuron.spike_recording_data
 
 timesteps = np.arange(0.0, 200.0, 0.1)
 
 # Create figure with 4 axes
-fig, axis = plt.subplots()
-axis.plot(timesteps, v)
-axis.vlines(up_spike_times, ymin=0, ymax=2, color="red", linestyle="--", label="UP")
-axis.set_xlabel("time [ms]")
-axis.set_ylabel("V [mV]")
-axis.legend()
-
-axis.set_ylim((0, 2))
-axis.set_ylim((0, 2))
-
+fig, axes = plt.subplots(3,1)
+axes[0].scatter(excitatory_spike_times, excitatory_ids,s=1)
+axes[0].set_xlabel("time [ms]")
+axes[0].set_ylim((0, width*height))
+axes[1].scatter(inhibitory_spike_times, inhibitory_ids,s=1)
+axes[1].set_xlabel("time [ms]")
+axes[1].set_ylim((0, width*height))
+axes[2].vlines(up_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
+axes[2].set_xlabel("time [ms]")
+axes[2].set_ylim((0, 4))
 plt.show()
