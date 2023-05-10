@@ -2,9 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
-# Simulation variables
-check_time = 10  # Check output spikes each 10 ms
-
 # Downscaled resolution
 width = 8
 height = 6
@@ -24,6 +21,8 @@ rf_model = create_custom_neuron_class("RF", param_names=["Damp", "Omega"],
 
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
+
+# Neuron parameters
 rf_excitatory_params = {"Damp": 2.5, "Omega": 1.1 * np.pi * 2.0}
 rf_inhibitory_params = {"Damp": 2.5, "Omega": 0.7 * np.pi * 2.0}
 rf_init = {"V": 0.0, "U": 0.0}
@@ -31,14 +30,13 @@ output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vres
                  'Ioffset': 0}
 output_init = {'RefracTime': 0, 'V': -65}
 
-# Testing input layer
-spike_times_1 = [1.1 * 2 * np.pi * i for i in range(15)]
-spike_times_2 = [(0.7 * np.pi * i) for i in range(15)]
-# list of sorted spike times for each neurons where t_1_2 is the time of the second spike you want the first neuron to emit
+# Mapping input spikes (test)
 spike_times = [[] for i in range(height * width)]
+
+frequency_test = [[1.1 * 2 * np.pi * i for i in range(15)], [(0.7 * np.pi * i) for i in range(15)]]
 spiking_neurons = [5, 27]
-spike_times[5] = spike_times_1
-spike_times[27] = spike_times_2
+for i in range(len(frequency_test)):
+	spike_times[spiking_neurons[i]] = frequency_test[i]
 
 # count how many spikes each neuron will emit
 spikes_per_neuron = [len(n) for n in spike_times]
@@ -50,7 +48,7 @@ end_spikes = [int(np.sum(spikes_per_neuron[:i + 1])) if i in spiking_neurons els
 start_spikes = [0 for _ in range(height * width)]
 start_spikes[27] = end_spikes[5]
 
-input_pop = model.add_neuron_population("Input", height * width, "SpikeSourceArray", {},
+input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
 input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times))
 input_pop.spike_recording_enabled = True
@@ -60,13 +58,14 @@ excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, r
 excitatory_pop.spike_recording_enabled = True
 inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, rf_model, rf_inhibitory_params, rf_init)
 inhibitory_pop.spike_recording_enabled = True
+
 up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, output_init)
 down_neuron = model.add_neuron_population('down_neuron', 1, "LIF", output_params, output_init)
 left_neuron = model.add_neuron_population('left_neuron', 1, "LIF", output_params, output_init)
 right_neuron = model.add_neuron_population('right_neuron', 1, "LIF", output_params, output_init)
 up_neuron.spike_recording_enabled = True
 
-# input to RF neurons
+# Input to excitatory and inhibitory matrices
 # TODO g value was added randomly
 model.add_synapse_population("input_excitatory", "SPARSE_GLOBALG", 0,
                              input_pop, excitatory_pop,
@@ -80,7 +79,7 @@ model.add_synapse_population("input_inhibitory", "SPARSE_GLOBALG", 0,
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
-# - Weight matrices -
+# Weight matrices
 height_up_weight_vector = np.linspace(1, 0, height)
 height_up_weight_matrix = np.tile(height_up_weight_vector, (width, 1)).T.reshape((height * width,))
 height_down_weight_vector = np.linspace(0, 1, height)
@@ -90,6 +89,7 @@ width_right_weight_matrix = np.tile(width_right_weight_vector, (1, height)).T.re
 width_left_weight_vector = np.linspace(1, 0, width)
 width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.reshape((height * width, 1))
 
+# Excitatory and inhibitory matrices to directional neurons
 model.add_synapse_population("excitatory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              excitatory_pop, up_neuron,
                              "StaticPulse", {}, {"g": height_up_weight_matrix}, {}, {},
@@ -100,6 +100,7 @@ model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              "StaticPulse", {}, {"g": -1 * height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
+# Build and simulate
 model.build()
 model.load(num_recording_timesteps=2000)
 
