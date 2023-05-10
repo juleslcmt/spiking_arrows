@@ -21,36 +21,58 @@ rf_model = create_custom_neuron_class("RF", param_names=["Damp", "Omega"],
 
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
+source_freq = 200
+target_freq = 300
 
 # Neuron parameters
-rf_excitatory_params = {"Damp": 2.5, "Omega": 2.0 * np.pi * 2.0}
-rf_inhibitory_params = {"Damp": 2.5, "Omega": 3.0 * np.pi * 2.0}
+rf_excitatory_params = {"Damp": 2.5, "Omega": source_freq / 100 * np.pi * 2.0}
+rf_inhibitory_params = {"Damp": 2.5, "Omega": target_freq / 100 * np.pi * 2.0}
 rf_init = {"V": 0.0, "U": 0.0}
 output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
                  'Ioffset': 0}
 output_init = {'RefracTime': 0, 'V': -65}
 
-# Mapping input spikes (test)
-spike_times = [[] for i in range(height * width)]
 
-frequency_test = [[2.0 * 2 * np.pi * i for i in range(15)], [(3.0 * np.pi * i) for i in range(15)]]
-spiking_neurons = [5, 27]
-for i in range(len(frequency_test)):
-	spike_times[spiking_neurons[i]] = frequency_test[i]
+# Mapping input spikes (test)
+def set_input_frequency(spiking_neurons, spike_times, num_neurons):
+    start_spikes = np.zeros(num_neurons)
+    end_spikes = np.zeros(num_neurons)
+
+    spikes = []
+    e = 0
+    t = 0
+    for i in range(num_neurons):
+        if i in spiking_neurons:
+            spikes.extend(spike_times[t])
+            start_spikes[i] = e
+            e += len(spike_times[t])
+            end_spikes[i] = e
+            t += 1
+        else:
+            start_spikes[i] = e
+            end_spikes[i] = e
+
+    return spikes, start_spikes, end_spikes
+
+
+spike_times, start_spikes, end_spikes = set_input_frequency([5, 27],
+                                                            [[source_freq / 100 * 2 * np.pi * i for i in range(15)],
+                                                             [(target_freq / 100 * np.pi * i) for i in range(15)]],
+                                                            height * width)
 
 # count how many spikes each neuron will emit
-#spikes_per_neuron = [len(n) for n in spike_times]
+# spikes_per_neuron = [len(n) for n in spike_times]
 # calculate cumulative sum i.e. index of the END of each neuron's block of spikes
-#end_spikes = [int(np.sum(spikes_per_neuron[:i + 1])) if i in spiking_neurons else 0 for i in range(height * width)]
+# end_spikes = [int(np.sum(spikes_per_neuron[:i + 1])) if i in spiking_neurons else 0 for i in range(height * width)]
 # np.cumsum(spikes_per_neuron)
 
 # from these get index of START of each neurons block of spikes
-#start_spikes = [0 for _ in range(height * width)]
-#start_spikes[27] = end_spikes[5]
+# start_spikes = [0 for _ in range(height * width)]
+# start_spikes[27] = end_spikes[5]
 
 input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
-input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times))
+input_pop.set_extra_global_param("spikeTimes", spike_times)
 input_pop.spike_recording_enabled = True
 
 # Network architecture
@@ -69,13 +91,13 @@ up_neuron.spike_recording_enabled = True
 # TODO g value was added randomly
 model.add_synapse_population("input_excitatory", "SPARSE_GLOBALG", 0,
                              input_pop, excitatory_pop,
-                             "StaticPulse", {}, {"g": 70.0}, {}, {},
+                             "StaticPulse", {}, {"g": 1.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
-                             
+
 model.add_synapse_population("input_inhibitory", "SPARSE_GLOBALG", 0,
                              input_pop, inhibitory_pop,
-                             "StaticPulse", {}, {"g": 70.0}, {}, {},
+                             "StaticPulse", {}, {"g": 1.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
@@ -94,7 +116,7 @@ model.add_synapse_population("excitatory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              excitatory_pop, up_neuron,
                              "StaticPulse", {}, {"g": height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
-                             
+
 model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              inhibitory_pop, up_neuron,
                              "StaticPulse", {}, {"g": -1 * height_up_weight_matrix}, {}, {},
@@ -104,17 +126,16 @@ model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
 model.build()
 model.load(num_recording_timesteps=2000)
 
-v_view = up_neuron.vars["V"].view
-v = []
+v_exc_view = excitatory_pop.vars["V"].view
+v_inh_view = inhibitory_pop.vars["V"].view
+v_exc = []
+v_inh = []
 while model.t < 200.0:
     model.step_time()
-    up_neuron.pull_var_from_device("V")
-    v.append(v_view[0])
-
-    # if model.t % check_time == 0:
-    #     model.pull_recording_buffers_from_device()
-    #     directional_spikes, _ = up_neuron.spike_recording_data
-    #     print(directional_spikes)
+    excitatory_pop.pull_var_from_device("V")
+    inhibitory_pop.pull_var_from_device("V")
+    v_exc.append(v_exc_view)
+    v_inh.append(v_inh_view)
 
 model.pull_recording_buffers_from_device()
 
@@ -125,14 +146,26 @@ up_spike_times, _ = up_neuron.spike_recording_data
 timesteps = np.arange(0.0, 200.0, 0.1)
 
 # Create figure with 4 axes
-fig, axes = plt.subplots(3,1)
-axes[0].scatter(excitatory_spike_times, excitatory_ids,s=1)
+fig, axes = plt.subplots(3, 1)
+axes[0].scatter(excitatory_spike_times, excitatory_ids, s=1)
 axes[0].set_xlabel("time [ms]")
-axes[0].set_ylim((0, width*height))
-axes[1].scatter(inhibitory_spike_times, inhibitory_ids,s=1)
+axes[0].set_ylim((0, width * height))
+axes[1].scatter(inhibitory_spike_times, inhibitory_ids, s=1)
 axes[1].set_xlabel("time [ms]")
-axes[1].set_ylim((0, width*height))
+axes[1].set_ylim((0, width * height))
 axes[2].vlines(up_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[2].set_xlabel("time [ms]")
 axes[2].set_ylim((0, 4))
+plt.show()
+
+# Plot membrane potential
+fig, axes = plt.subplots(2, 1)
+axes[0].plot(timesteps, v_exc)
+axes[0].set_xlabel("time [ms]")
+axes[0].set_ylabel("membrane potential [mV]")
+axes[0].set_title("Excitatory neuron")
+axes[1].plot(timesteps, v_inh)
+axes[1].set_xlabel("time [ms]")
+axes[1].set_ylabel("membrane potential [mV]")
+axes[1].set_title("Inhibitory neuron")
 plt.show()
