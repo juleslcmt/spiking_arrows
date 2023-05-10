@@ -21,8 +21,8 @@ genn_input_model = create_custom_neuron_class(
 
 
 model = GeNNModel("float", "usb_genn")
-DVS_pop = model.add_neuron_population("DVS_input", width*height, genn_input_model, {}, {})
-DVS_pop.set_extra_global_param("DVS_input", np.empty(9600, dtype=np.uint32))
+DVS_pop = model.add_neuron_population("input", width*height, genn_input_model, {}, {})
+DVS_pop.set_extra_global_param("input", np.empty(9600, dtype=np.uint32))
 DVS_pop.spike_recording_enabled = True
 
 # Resonate and fire neuron model
@@ -38,7 +38,6 @@ rf_model = create_custom_neuron_class("RF", param_names=["Damp", "Omega"],
                                       threshold_condition_code="""$(V) >= 1.0""",
                                       reset_code="""""")
 
-model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
 rf_excitatory_params = {"Damp": 2.5, "Omega": 2.0 * np.pi * 2.0}
 rf_inhibitory_params = {"Damp": 2.5, "Omega": 3.0 * np.pi * 2.0}
