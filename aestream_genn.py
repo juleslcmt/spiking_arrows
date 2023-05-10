@@ -1,6 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
+
+sys.path.append('/opt/spiking_arrows/')
+
+import laser
 from aestream import USBInput
+import time
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
 # Simulation variables
@@ -38,7 +44,7 @@ rf_model = create_custom_neuron_class("RF", param_names=["Damp", "Omega"],
                                       threshold_condition_code="""$(V) >= 1.0""",
                                       reset_code="""""")
 
-model.dT = 0.1
+model.dT = 0.01
 rf_excitatory_params = {"Damp": 2.5, "Omega": 2.0 * np.pi * 2.0}
 rf_inhibitory_params = {"Damp": 2.5, "Omega": 3.0 * np.pi * 2.0}
 rf_init = {"V": 0.0, "U": 0.0}
@@ -96,34 +102,57 @@ model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
 model.build()
 model.load(num_recording_timesteps=2000)
 
-v_view = up_neuron.vars["V"].view
+v_view_up = up_neuron.vars["V"].view
+v_view_down = down_neuron.vars["V"].view
+v_view_left = left_neuron.vars["V"].view
+v_view_right = right_neuron.vars["V"].view
+v_all = [v_view_up, v_view_down, v_view_left, v_view_right]
 v = []
 
 # Connect to a USB camera, receiving tensors of shape (640, 480)
 # By default, we send the tensors to the CPU
 #   - if you have a GPU, try changing this to "cuda"
 with USBInput((height, width), device="genn") as stream:
-    # Loop forever
-    while True:
-        for i in range(100):
-            stream.read_genn(DVS_pop.extra_global_params["input"].view)
-            DVS_pop.push_extra_global_param_to_device("input")
-        
-            model.step_time()
-            up_neuron.pull_var_from_device("V")
-            v.append(v_view[0])
-        
-        model.pull_recording_buffers_from_device()
-        #excitatory_spike_times, excitatory_ids = excitatory_pop.spike_recording_data
-        #inhibitory_spike_times, inhibitory_ids = inhibitory_pop.spike_recording_data
-        #up_spike_times, _ = up_neuron.spike_recording_data
-        spike_times, spike_ids = DVS_pop.spike_recording_data
+    with laser.Laser() as l :
+        l.on()
+        state = (2000, 2000)
 
-        # Plotting code from Jamie (GeNN)
-        fig, axis = plt.subplots()
-        spike_x = spike_ids % height
-        spike_y = spike_ids // height
-        axis.scatter(spike_x, spike_y, s=1)
-        plt.show()
+        time_start = time.time()
+        # Loop forever
+        while True:
+            print(stream)
+            for i in range(1000000):
+                stream.read_genn(DVS_pop.extra_global_params["input"].view)
+                print("10ms window with events ", np.count_nonzero(DVS_pop.extra_global_params["input"].view))
+                DVS_pop.push_extra_global_param_to_device("input")
+            
+                model.step_time()
+                up_neuron.pull_var_from_device("V")
+                down_neuron.pull_var_from_device("V")
+                left_neuron.pull_var_from_device("V")
+                right_neuron.pull_var_from_device("V")
+                v.append(v_view_up[0])
+                time.sleep(check_time/1000)
+                if v_all != [-65, -65, -65, -65] :
+                    print(v_all)
+                    #print("spiking !")
+
+                print((time.time() - time_start)%1)
+                if (time.time() - time_start) % 0.1 < 0.01 :
+                    state = (np.random.randint(2095, 3500), np.random.randint(2095, 3500))
+                    l.move(*state)
+
+            model.pull_recording_buffers_from_device()
+            #excitatory_spike_times, excitatory_ids = excitatory_pop.spike_recording_data
+            #inhibitory_spike_times, inhibitory_ids = inhibitory_pop.spike_recording_data
+            #up_spike_times, _ = up_neuron.spike_recording_data
+            spike_times, spike_ids = DVS_pop.spike_recording_data
+
+            # Plotting code from Jamie (GeNN)
+            #fig, axis = plt.subplots()
+            spike_x = spike_ids % height
+            spike_y = spike_ids // height
+            #axis.scatter(spike_x, spike_y, s=1)
+            #plt.show()
 
     
