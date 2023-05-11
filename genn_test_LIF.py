@@ -7,27 +7,13 @@ width = 8
 height = 6
 
 # Resonate and fire neuron model
-rf_model = create_custom_neuron_class("RF", param_names=["Damp", "Omega"],
-                                      var_name_types=[("V", "scalar"), ("U", "scalar")],
-                                      sim_code=
-                                      """
-                                      const scalar oldV = $(V);
-                                      const scalar oldU = $(U);
-                                      $(V) += DT * oldU;
-                                      $(U) += DT * ($(Isyn) - (2.0 * $(Damp) * oldU) - ($(Omega) * $(Omega) * oldV));
-                                      """,
-                                      threshold_condition_code="""$(V) >= 1.0""",
-                                      reset_code="""""")
-
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
 
 # Neuron parameters
-excitatory_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
-                 'Ioffset': 0}
-inhibitory_params = {"C": 1.0, "TauM": 1.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -47.85,
-                 'Ioffset': 0}
-output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.75,
+filter_high_params = {"C": 1.0, "TauM": 1.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -48.0, 'Ioffset': 0}
+filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
+output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.95,
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
 
@@ -50,10 +36,10 @@ input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times, axis=
 input_pop.spike_recording_enabled = True
 
 # Network architecture
-excitatory_pop = model.add_neuron_population("excitatory_pop", width * height, "LIF", excitatory_params, LIF_init)
-excitatory_pop.spike_recording_enabled = True
-inhibitory_pop = model.add_neuron_population("inhibitory_pop", width * height, "LIF", inhibitory_params, LIF_init)
-inhibitory_pop.spike_recording_enabled = True
+filter_high_pop = model.add_neuron_population("filter_high_pop", width * height, "LIF", filter_high_params, LIF_init)
+filter_high_pop.spike_recording_enabled = True
+filter_low_pop = model.add_neuron_population("filter_low_pop", width * height, "LIF", filter_low_params, LIF_init)
+filter_low_pop.spike_recording_enabled = True
 
 up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, LIF_init)
 down_neuron = model.add_neuron_population('down_neuron', 1, "LIF", output_params, LIF_init)
@@ -64,24 +50,22 @@ down_neuron.spike_recording_enabled = True
 left_neuron.spike_recording_enabled = True
 right_neuron.spike_recording_enabled = True
 
-# Input to excitatory and inhibitory matrices
-# TODO g value was added randomly
-model.add_synapse_population("input_excitatory", "SPARSE_GLOBALG", 0,
-                             input_pop, excitatory_pop,
+# Input to filter matrices
+model.add_synapse_population("input_to_high_filter", "SPARSE_GLOBALG", 0,
+                             input_pop, filter_high_pop,
                              "StaticPulse", {}, {"g": 70.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
                              
-model.add_synapse_population("input_inhibitory", "SPARSE_GLOBALG", 0,
-                             input_pop, inhibitory_pop,
+model.add_synapse_population("input_to_low_filter", "SPARSE_GLOBALG", 0,
+                             input_pop, filter_low_pop,
                              "StaticPulse", {}, {"g": 70.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
                              
-# Inhibitory matrix inhibits excitatory matrix to filter the source point
-model.add_synapse_population("target_filter", "SPARSE_GLOBALG", 0,
-                             inhibitory_pop, excitatory_pop,
-                             "StaticPulse", {}, {"g": -1000.0}, {}, {},
+model.add_synapse_population("high_to_low", "SPARSE_GLOBALG", 0,
+                             filter_high_pop, filter_low_pop,
+                             "StaticPulse", {}, {"g": -1400.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
@@ -97,42 +81,42 @@ width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.resh
 
 # Excitatory and inhibitory matrices to directional neurons
 model.add_synapse_population("excitatory_up_neuron", "DENSE_INDIVIDUALG", 0,
-                             excitatory_pop, up_neuron,
+                             filter_high_pop, up_neuron,
                              "StaticPulse", {}, {"g": height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
-                             inhibitory_pop, up_neuron,
+                             filter_low_pop, up_neuron,
                              "StaticPulse", {}, {"g": -1 * height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("excitatory_down_neuron", "DENSE_INDIVIDUALG", 0,
-                             excitatory_pop, down_neuron,
+                             filter_high_pop, down_neuron,
                              "StaticPulse", {}, {"g": height_down_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("inhibitory_down_neuron", "DENSE_INDIVIDUALG", 0,
-                             inhibitory_pop, down_neuron,
+                             filter_low_pop, down_neuron,
                              "StaticPulse", {}, {"g": -1 * height_down_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("excitatory_left_neuron", "DENSE_INDIVIDUALG", 0,
-                             excitatory_pop, left_neuron,
+                             filter_high_pop, left_neuron,
                              "StaticPulse", {}, {"g": width_left_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("inhibitory_left_neuron", "DENSE_INDIVIDUALG", 0,
-                             inhibitory_pop, left_neuron,
+                             filter_low_pop, left_neuron,
                              "StaticPulse", {}, {"g": -1 * width_left_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("excitatory_right_neuron", "DENSE_INDIVIDUALG", 0,
-                             excitatory_pop, right_neuron,
+                             filter_high_pop, right_neuron,
                              "StaticPulse", {}, {"g": width_right_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("inhibitory_right_neuron", "DENSE_INDIVIDUALG", 0,
-                             inhibitory_pop, right_neuron,
+                             filter_low_pop, right_neuron,
                              "StaticPulse", {}, {"g": -1 * width_right_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
@@ -154,8 +138,8 @@ while model.t < 200.0:
 
 model.pull_recording_buffers_from_device()
 
-excitatory_spike_times, excitatory_ids = excitatory_pop.spike_recording_data
-inhibitory_spike_times, inhibitory_ids = inhibitory_pop.spike_recording_data
+filter_high_spike_times, excitatory_ids = filter_high_pop.spike_recording_data
+filter_low_spike_times, inhibitory_ids = filter_low_pop.spike_recording_data
 up_spike_times, _ = up_neuron.spike_recording_data
 down_spike_times, _ = down_neuron.spike_recording_data
 left_spike_times, _ = left_neuron.spike_recording_data
@@ -165,10 +149,10 @@ timesteps = np.arange(0.0, 200.0, model.dT)
 
 # Create figure with 4 axes
 fig, axes = plt.subplots(6,1)
-axes[0].scatter(excitatory_spike_times, excitatory_ids,s=4)
+axes[0].scatter(filter_high_spike_times, excitatory_ids,s=4)
 axes[0].set_xlabel("time [ms]")
 axes[0].set_ylim((0, width*height))
-axes[1].scatter(inhibitory_spike_times, inhibitory_ids,s=4)
+axes[1].scatter(filter_low_spike_times, inhibitory_ids,s=4)
 axes[1].set_xlabel("time [ms]")
 axes[1].set_ylim((0, width*height))
 axes[2].vlines(up_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
