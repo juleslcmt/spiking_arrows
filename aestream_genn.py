@@ -164,6 +164,7 @@ with USBInput((height, width), device="genn") as stream:
             #fig, axis = plt.subplots()
             spike_x = spike_ids % height
             spike_y = spike_ids // height
+            
             #axis.scatter(spike_x, spike_y, s=1)
             #plt.show()
 
