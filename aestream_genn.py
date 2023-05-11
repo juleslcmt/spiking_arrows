@@ -100,7 +100,8 @@ model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              "DeltaCurr", {}, {})
 
 model.build()
-model.load(num_recording_timesteps=2000)
+timesteps = 10
+model.load(num_recording_timesteps=10)
 
 v_view_up = up_neuron.vars["V"].view
 v_view_down = down_neuron.vars["V"].view
@@ -108,8 +109,11 @@ v_view_left = left_neuron.vars["V"].view
 v_view_right = right_neuron.vars["V"].view
 v_all = [v_view_up, v_view_down, v_view_left, v_view_right]
 
+excitatory_view = excitatory_pop.vars["V"].view
+inhibitory_view = inhibitory_pop.vars["V"].view
+
 step_size = 100 
-moves_map = ["up","down","left","right"]
+arrow_neurons = ["up_neuron","down_neuron","left_neuron","right_neuron"]
 moves = [(-step_size, 0), (step_size, 0), (0, -step_size), (0, step_size)]
 
 # Connect to a USB camera, receiving tensors of shape (640, 480)
@@ -134,26 +138,23 @@ with USBInput((height, width), device="genn") as stream:
                 down_neuron.pull_var_from_device("V")
                 left_neuron.pull_var_from_device("V")
                 right_neuron.pull_var_from_device("V")
+
+                excitatory_pop.pull_var_from_device("V")
+                inhibitory_pop.pull_var_from_device("V")
                 time.sleep(check_time)
 
                 moving = False
-                print(v_all)
-                for i,v in enumerate(v_all) :
-                    if v != -65 :
-                        print(v)
-                        state += moves[i]
-                        print("Going " + moves_map[i])
+                print("step")
+                for j,neuron in enumerate(arrow_neurons) :
+                    print(neuron)
+                    if model.pull_spikes_from_device(neuron) :
+                        print("spiking " + neuron)
+                        state = (max(0,min(4095,state[0]+moves[j][0])), max(0,min(4095,state[1]+moves[j][1])))
                         moving = True
                 
                 if moving :
                     print(state)
                     l.move(*state)
-
-                """ if (time.time() - time_start) % 0.1 < 0.01 :
-                    state = (np.random.randint(2095, 3500), np.random.randint(2095, 3500))
-                    l.move(*state) """
-
-            model.pull_recording_buffers_from_device()
             #excitatory_spike_times, excitatory_ids = excitatory_pop.spike_recording_data
             #inhibitory_spike_times, inhibitory_ids = inhibitory_pop.spike_recording_data
             #up_spike_times, _ = up_neuron.spike_recording_data
