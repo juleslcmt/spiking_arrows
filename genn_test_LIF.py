@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
-# Downscaled resolution
-width = 8
-height = 6
+# Resolution
+width = 640
+height = 480
 
 # Resonate and fire neuron model
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
@@ -13,7 +13,7 @@ model.dT = 0.1
 # Neuron parameters
 filter_high_params = {"C": 1.0, "TauM": 1.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -48.0, 'Ioffset': 0}
 filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
-output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.95,
+output_params = {"C": 0.1, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.95,
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
 
@@ -25,10 +25,10 @@ start_spikes = [0 for i in range(height*width)]
 end_spikes = [0 for i in range(height*width)]
 
 end_spikes[0] = len_spike_times[0]
-start_spikes[3] = len_spike_times[0]
-end_spikes[3] = len_spike_times[0] + len_spike_times[1]
-start_spikes[width-1] = len_spike_times[0] + len_spike_times[1]
-end_spikes[width-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
+start_spikes[width-1] = len_spike_times[0]
+end_spikes[width-1] = len_spike_times[0] + len_spike_times[1]
+start_spikes[width*5-1] = len_spike_times[0] + len_spike_times[1]
+end_spikes[width*5-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
 
 input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
@@ -70,13 +70,13 @@ model.add_synapse_population("high_to_low", "SPARSE_GLOBALG", 0,
                              init_connectivity("OneToOne", {}))
 
 # Weight matrices
-height_up_weight_vector = np.linspace(1, 0, height)
+height_up_weight_vector = np.linspace(height, 0, height)
 height_up_weight_matrix = np.tile(height_up_weight_vector, (width, 1)).T.reshape((height * width,))
-height_down_weight_vector = np.linspace(0, 1, height)
+height_down_weight_vector = np.linspace(0, height, height)
 height_down_weight_matrix = np.tile(height_down_weight_vector, (width, 1)).T.reshape((height * width,))
-width_right_weight_vector = np.linspace(0, 1, width)
+width_right_weight_vector = np.linspace(0, width, width)
 width_right_weight_matrix = np.tile(width_right_weight_vector, (1, height)).T.reshape((height * width,))
-width_left_weight_vector = np.linspace(1, 0, width)
+width_left_weight_vector = np.linspace(width, 0, width)
 width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.reshape((height * width,))
 
 # Excitatory and inhibitory matrices to directional neurons
