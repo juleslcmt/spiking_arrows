@@ -36,15 +36,6 @@ rf_matlab_model = create_custom_neuron_class(
     reset_code=
     """
     """)
-"""
-def rk4_step( x, t, f, dt, args ):
-    const scalar k1 = f( t, x, *args )
-    const scalar k2 = f( t + dt / 2, x + dt * k1 / 2, *args )
-    const scalar k3 = f( t + dt / 2, x + dt * k2 / 2, *args )
-    const scalar k4 = f( t + dt, x + dt * k3, *args )
-    
-    return x + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
-    """
 izi_rz = create_custom_neuron_class(
     'IzhikevichBio',
     param_names=['a', 'b', 'c', 'd', 'k', 'Cm', 'Vr', 'Vth', 'Vspike'],
@@ -83,9 +74,10 @@ model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 sim_time = 200
 model.dT = 0.01  # 0.1 ms timestep
 timesteps = int(sim_time / model.dT)
+omega = 100
+input_frequency = 100
 
 # RAF
-omega = 100
 rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
 rf_init = {"V": 0.0, "U": 0.0}
 neuron_pop = model.add_neuron_population("Neuron", 1, rf_matlab_model, rf_params, rf_init)
@@ -151,7 +143,7 @@ def set_input_frequency(spiking_neurons, spike_times):
     return spikes, start_spikes, end_spikes
 
 
-spike_times = generate_spike_times_frequency(0, 100, 75)
+spike_times = generate_spike_times_frequency(0, 100, input_frequency)
 spike_times, start_spikes, end_spikes = set_input_frequency([0], [spike_times])
 
 input_pop = model.add_neuron_population("Input", 1, "SpikeSourceArray", {},
