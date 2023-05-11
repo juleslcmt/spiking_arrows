@@ -36,70 +36,6 @@ rf_matlab_model = create_custom_neuron_class(
     reset_code=
     """
     """)
-izi_rz = create_custom_neuron_class(
-    'IzhikevichBio',
-    param_names=['a', 'b', 'c', 'd', 'k', 'Cm', 'Vr', 'Vth', 'Vspike'],
-    var_name_types=[('V', 'scalar'), ('U', 'scalar')],
-    support_code=
-    """
-        SUPPORT_CODE_FUNC scalar dvdt( scalar V, scalar k, scalar Vr, scalar Vth, scalar Isyn, scalar U){
-        return k * ( V - Vr ) * ( V - Vth ) - U + Isyn;
-    }
-    """,
-    sim_code=
-    """
-    const scalar k1 = dvdt( $(V), $(k), $(Vr), $(Vth), $(Isyn), $(U) );
-    const scalar k2 = dvdt( $(V) + DT * k1 / 2, $(k), $(Vr), $(Vth), $(Isyn), $(U) );
-    const scalar k3 = dvdt( $(V) + DT * k2 / 2, $(k), $(Vr), $(Vth), $(Isyn), $(U) );
-    const scalar k4 = dvdt( $(V) + DT * k3, $(k), $(Vr), $(Vth), $(Isyn), $(U) );
-    $(V) += DT * ( k1 + 2 * k2 + 2 * k3 + k4 ) / 6;
-    
-    $(U) += $(a) * ( $(b) * ( $(V) - $(Vr) ) - $(U) ) * DT;
-    
-    if ( $(V) > $(Vspike) ) {
-        $(V) = $(Vspike);
-    }
-    """,
-    threshold_condition_code=
-    """
-    $(V) >= $(Vspike) - 0.01
-    """,
-    reset_code=
-    """
-    $(V) = $(c);
-    $(U) += $(d);
-    """)
-
-model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
-sim_time = 200
-model.dT = 0.01  # 0.1 ms timestep
-timesteps = int(sim_time / model.dT)
-omega = 100
-input_frequency = 100
-
-# RAF
-rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
-rf_init = {"V": 0.0, "U": 0.0}
-neuron_pop = model.add_neuron_population("Neuron", 1, rf_matlab_model, rf_params, rf_init)
-
-# IZHIKEVICH RZ
-izk_param = {
-    "a": 1.04,
-    "b": 0.996,
-    'Cm': 0.05,
-    'k': 0.11,
-    'Vr': -60,
-    "c": -55,
-    "d": 10,
-    "Vspike": 50
-}
-izk_vars = {
-    "V": -65.0,
-    "U": -20.0
-}
-izk_param['Vth'] = izk_param['Vr'] - izk_param['Cm'] / izk_param['k']
-# neuron_pop = model.add_neuron_population("Neuron", 1, izi_rz, izk_param, izk_vars)
-neuron_pop.spike_recording_enabled = True
 
 
 def generate_spike_times_frequency(start_time, end_time, frequency):
@@ -143,45 +79,128 @@ def set_input_frequency(spiking_neurons, spike_times):
     return spikes, start_spikes, end_spikes
 
 
-spike_times = generate_spike_times_frequency(0, 100, input_frequency)
-spike_times, start_spikes, end_spikes = set_input_frequency([0], [spike_times])
+def plot_raf_model(input_frequency):
+    input_frequencies = np.random.normal(input_frequency, 10, 10)
+    input_frequencies.sort()
 
-input_pop = model.add_neuron_population("Input", 1, "SpikeSourceArray", {},
-                                        {"startSpike": start_spikes, "endSpike": end_spikes})
-input_pop.set_extra_global_param("spikeTimes", spike_times)
-# input_pop.set_extra_global_param("spikeTimes", [0.0])
-input_pop.spike_recording_enabled = True
+    fig, axes = plt.subplots(5, 2, figsize=(15, 15))
+    spikes_at_frequency = []
+    for f, ax in zip(input_frequencies, axes.flatten()):
+        model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
+        model.dT = dt
+        timesteps = int(sim_time / model.dT)
 
-model.add_synapse_population("InputNeuron", "SPARSE_GLOBALG", 0,
-                             input_pop, neuron_pop,
-                             "StaticPulse", {}, {"g": 50.0}, {}, {},
-                             "DeltaCurr", {}, {},
-                             init_connectivity("OneToOne", {}))
+        neuron_pop = model.add_neuron_population("Neuron", 1, rf_matlab_model, rf_params, rf_init)
+        neuron_pop.spike_recording_enabled = True
 
-model.build()
-model.load(num_recording_timesteps=timesteps)
+        spike_times = generate_spike_times_frequency(0, 100, f)
+        spike_times, start_spikes, end_spikes = set_input_frequency([0], [spike_times])
 
-v_view = neuron_pop.vars["V"].view
-v = []
-while model.t < sim_time:
-    model.step_time()
-    neuron_pop.pull_var_from_device("V")
-    v.append(np.copy(v_view[0]))
+        input_pop = model.add_neuron_population("Input", 1, "SpikeSourceArray", {},
+                                                {"startSpike": start_spikes, "endSpike": end_spikes})
+        input_pop.set_extra_global_param("spikeTimes", spike_times)
+        # input_pop.set_extra_global_param("spikeTimes", [0.0])
+        input_pop.spike_recording_enabled = True
 
-model.pull_recording_buffers_from_device()
+        model.add_synapse_population("InputNeuron", "SPARSE_GLOBALG", 0,
+                                     input_pop, neuron_pop,
+                                     "StaticPulse", {}, {"g": 50.0}, {}, {},
+                                     "DeltaCurr", {}, {},
+                                     init_connectivity("OneToOne", {}))
 
-input_spike_times, _ = input_pop.spike_recording_data
-neuron_spike_times, _ = neuron_pop.spike_recording_data
+        model.build()
+        model.load(num_recording_timesteps=timesteps)
 
-timesteps = np.arange(0.0, 200.0, model.dT)
+        v_view = neuron_pop.vars["V"].view
+        v = []
+        while model.t < sim_time:
+            model.step_time()
+            neuron_pop.pull_var_from_device("V")
+            v.append(np.copy(v_view[0]))
 
-# Create figure with 4 axes
-fig, axis = plt.subplots(figsize=(12, 8))
-axis.plot(timesteps, v)
-axis.vlines(input_spike_times, ymin=-1, ymax=0, color="red", linestyle="--", label="input")
-axis.vlines(neuron_spike_times, ymin=0, ymax=1, color="blue", label="neuron")
-axis.set_xlabel("time [ms]")
-axis.set_ylabel("V")
-axis.set_ylim([-1.1, 1.1])
-axis.legend()
-fig.show()
+        model.pull_recording_buffers_from_device()
+
+        input_spike_times, _ = input_pop.spike_recording_data
+        neuron_spike_times, _ = neuron_pop.spike_recording_data
+        spikes_at_frequency.append(len(neuron_spike_times))
+
+        # Create figure with 4 axes
+        t = np.arange(0.0, 200.0, model.dT)
+        ax.plot(t, v)
+        ax.vlines(input_spike_times, ymin=-1, ymax=0, color="red", linestyle="--", label="input")
+        ax.vlines(neuron_spike_times, ymin=0, ymax=1, color="blue", label="neuron")
+        ax.set_xlabel("time [ms]")
+        ax.set_ylabel("V")
+        ax.set_ylim([-1.1, 1.1])
+        ax.set_title(f"Input frequency: {f:.2f} Hz, {len(neuron_spike_times)} spikes")
+
+    ax.legend()
+    fig.suptitle(f"RAF neuron centred around {input_frequency} Hz", fontsize=16)
+    fig.tight_layout()
+    fig.show()
+
+
+def run_raf_model(input_frequency):
+    input_frequencies = np.random.normal(input_frequency, 10, 100)
+    input_frequencies.sort()
+
+    spikes_at_frequency = []
+    for f in input_frequencies:
+        model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
+        model.dT = dt
+        timesteps = int(sim_time / model.dT)
+
+        neuron_pop = model.add_neuron_population("Neuron", 1, rf_matlab_model, rf_params, rf_init)
+        neuron_pop.spike_recording_enabled = True
+
+        spike_times = generate_spike_times_frequency(0, 100, f)
+        spike_times, start_spikes, end_spikes = set_input_frequency([0], [spike_times])
+
+        input_pop = model.add_neuron_population("Input", 1, "SpikeSourceArray", {},
+                                                {"startSpike": start_spikes, "endSpike": end_spikes})
+        input_pop.set_extra_global_param("spikeTimes", spike_times)
+        # input_pop.set_extra_global_param("spikeTimes", [0.0])
+        input_pop.spike_recording_enabled = True
+
+        model.add_synapse_population("InputNeuron", "SPARSE_GLOBALG", 0,
+                                     input_pop, neuron_pop,
+                                     "StaticPulse", {}, {"g": 50.0}, {}, {},
+                                     "DeltaCurr", {}, {},
+                                     init_connectivity("OneToOne", {}))
+
+        model.build()
+        model.load(num_recording_timesteps=timesteps)
+
+        v_view = neuron_pop.vars["V"].view
+        v = []
+        while model.t < sim_time:
+            model.step_time()
+            neuron_pop.pull_var_from_device("V")
+            v.append(np.copy(v_view[0]))
+
+        model.pull_recording_buffers_from_device()
+
+        input_spike_times, _ = input_pop.spike_recording_data
+        neuron_spike_times, _ = neuron_pop.spike_recording_data
+        spikes_at_frequency.append(len(neuron_spike_times))
+
+    print('Number of spikes at each frequency:')
+    print({f: s for f, s in zip(input_frequencies, spikes_at_frequency)})
+    plt.plot(input_frequencies, spikes_at_frequency, "o")
+    plt.xlim([np.min(input_frequencies), np.max(input_frequencies)])
+    plt.title(f"Number of spikes of RAF neuron centred around {input_frequency} Hz")
+    # plt.xticks(input_frequencies)
+    plt.show()
+
+
+sim_time = 200
+dt = 0.01
+omega = 300
+input_frequency = 300
+
+# RAF
+rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
+rf_init = {"V": 0.0, "U": 0.0}
+
+plot_raf_model(input_frequency)
+run_raf_model(input_frequency)
