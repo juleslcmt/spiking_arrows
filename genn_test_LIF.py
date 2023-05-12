@@ -3,8 +3,8 @@ import numpy as np
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
 # Resolution
-width = 4
-height = 3
+width = 640
+height = 480
 
 # Resonate and fire neuron model
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
@@ -18,7 +18,7 @@ output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vres
 LIF_init = {'RefracTime': 0, 'V': -65}
 
 # Mapping input spikes (test)
-spike_times = [np.arange(0, 200, 1000/5000), np.arange(0, 200, 1000/10000), np.arange(100, 200, 1000/5000)] 
+spike_times = [np.arange(0, 100, 1000/5000), np.arange(0, 200, 1000/10000), np.arange(100, 200, 1000/5000)] 
 len_spike_times = [len(x) for x in spike_times]
 
 start_spikes = [0 for i in range(height*width)]
@@ -27,8 +27,8 @@ end_spikes = [0 for i in range(height*width)]
 end_spikes[0] = len_spike_times[0]
 start_spikes[width-1] = len_spike_times[0]
 end_spikes[width-1] = len_spike_times[0] + len_spike_times[1]
-#start_spikes[width*3-1] = len_spike_times[0] + len_spike_times[1]
-#end_spikes[width*3-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
+start_spikes[width*int(height/4)-1] = len_spike_times[0] + len_spike_times[1]
+end_spikes[width*int(height/4)-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
 
 input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
@@ -70,14 +70,21 @@ model.add_synapse_population("high_to_low", "SPARSE_GLOBALG", 0,
                              init_connectivity("OneToOne", {}))
 
 # Weight matrices
-max_weight = 70
-height_up_weight_vector = np.linspace(max_weight, 0, height)
+max_weight_v = height*10
+min_weight_v = height
+max_weight_h = width*10
+min_weight_h = width
+
+height_up_weight_vector = np.linspace(max_weight_v, min_weight_v, height)
 height_up_weight_matrix = np.tile(height_up_weight_vector, (width, 1)).T.reshape((height * width,))
-height_down_weight_vector = np.linspace(0, max_weight, height)
+
+height_down_weight_vector = np.linspace(min_weight_v, max_weight_v, height)
 height_down_weight_matrix = np.tile(height_down_weight_vector, (width, 1)).T.reshape((height * width,))
-width_left_weight_vector = np.linspace(max_weight, 0, width)
+
+width_left_weight_vector = np.linspace(max_weight_h, min_weight_h, width)
 width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.reshape((height * width,))
-width_right_weight_vector = np.linspace(0, max_weight, width)
+
+width_right_weight_vector = np.linspace(min_weight_h, max_weight_h, width)
 width_right_weight_matrix = np.tile(width_right_weight_vector, (1, height)).T.reshape((height * width,))
 
 # Filter high to directional neurons
@@ -102,25 +109,25 @@ model.add_synapse_population("excitatory_right_neuron", "DENSE_INDIVIDUALG", 0,
                              "DeltaCurr", {}, {})
                              
 # Filter low to directional neurons
-'''model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
+model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, up_neuron,
-                             "StaticPulse", {}, {"g": -1 * height_up_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("inhibitory_down_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, down_neuron,
-                             "StaticPulse", {}, {"g": -1 * height_down_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * height_down_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("inhibitory_left_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, left_neuron,
-                             "StaticPulse", {}, {"g": -1 * width_left_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * width_left_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("inhibitory_right_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, right_neuron,
-                             "StaticPulse", {}, {"g": -1 * width_right_weight_matrix}, {}, {},
-                             "DeltaCurr", {}, {})'''
+                             "StaticPulse", {}, {"g": -1.25 * width_right_weight_matrix}, {}, {},
+                             "DeltaCurr", {}, {})
 
 # Build and simulate
 model.build()
