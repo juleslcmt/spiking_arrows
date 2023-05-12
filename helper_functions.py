@@ -47,7 +47,7 @@ def raf_model():
 
     return create_custom_neuron_class(
         "RF",
-        param_names=["Damp", "Omega"],
+        param_names=["Damp", "Omega", 'Vspike'],
         var_name_types=[("V", "scalar"), ("U", "scalar")],
         support_code=
         """
@@ -67,13 +67,13 @@ def raf_model():
         const scalar k4 = dudt( $(U) + DT * k3, $(Damp), $(Omega), $(Isyn), oldV );
         $(U) += DT * ( k1 + 2 * k2 + 2 * k3 + k4 ) / 6;
     
-        if ( $(V) > 1.0 ) {
-        $(V) = 1.0;
+        if ( $(V) > $(Vspike) ) {
+        $(V) = $(Vspike);
         }
         """,
         threshold_condition_code=
         """
-        $(V) >= 0.99
+        $(V) >= $(Vspike) - 0.01
         """,
         reset_code=
         """

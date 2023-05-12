@@ -71,6 +71,8 @@ def run_raf_model(input_frequency, plot=False):
     ax.plot(input_frequencies, spikes_at_frequency, "o")
     ax.set_xlim([np.min(input_frequencies), np.max(input_frequencies)])
     ax.set_title(f"Number of spikes of RAF neuron centred around {input_frequency} Hz")
+    ax.set_xlabel("Input frequency [Hz]")
+    ax.set_ylabel("Number of spikes")
     # plt.xticks(input_frequencies)
     fig.show()
 
@@ -81,7 +83,7 @@ omega = 300
 input_frequency = 300
 
 # RAF
-rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
+rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2, 'Vspike': 0.9}
 rf_init = {"V": 0.0, "U": 0.0}
 
 run_raf_model(input_frequency, plot=True)
