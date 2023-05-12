@@ -65,8 +65,10 @@ model.dT = dt
 sim_time = 200
 timesteps = int(sim_time / model.dT)
 
-omega = 300
-rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
+omega_tgt = 300
+omega_src = 100
+rf_params_tgt = {"Damp": 0.1, "Omega": omega_tgt / 1000 * np.pi * 2}
+rf_params_src = {"Damp": 0.1, "Omega": omega_src / 1000 * np.pi * 2}
 rf_init = {"V": 0.0, "U": 0.0}
 
 LIF_init = {'RefracTime': 0, 'V': -65}
@@ -85,16 +87,16 @@ input_pop.spike_recording_enabled = True
 
 # WE NEED PARAMETER TUNING FOR THE TWO RF POPULATIONS
 
-src_neuron_pop = model.add_neuron_population("RF_src_neurons", width*height, rf_model, rf_params, rf_init)
+src_neuron_pop = model.add_neuron_population("RF_src_neurons", width*height, rf_model, rf_params_src, rf_init)
 src_neuron_pop.spike_recording_enabled = True
 
-tgt_neuron_pop = model.add_neuron_population("RF_tgt_neurons", width*height, rf_model, rf_params, rf_init)
+tgt_neuron_pop = model.add_neuron_population("RF_tgt_neurons", width*height, rf_model, rf_params_tgt, rf_init)
 tgt_neuron_pop.spike_recording_enabled = True
 
-up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, LIF_init)
-down_neuron = model.add_neuron_population('down_neuron', 1, "LIF", output_params, LIF_init)
-left_neuron = model.add_neuron_population('left_neuron', 1, "LIF", output_params, LIF_init)
-right_neuron = model.add_neuron_population('right_neuron', 1, "LIF", output_params, LIF_init)
+up_neuron = model.add_neuron_population("up_neuron", 1, rf_model, output_params, rf_init)
+down_neuron = model.add_neuron_population('down_neuron', 1, rf_model, output_params, rf_init)
+left_neuron = model.add_neuron_population('left_neuron', 1, rf_model, output_params, rf_init)
+right_neuron = model.add_neuron_population('right_neuron', 1, rf_model, output_params, rf_init)
 up_neuron.spike_recording_enabled = True
 down_neuron.spike_recording_enabled = True
 left_neuron.spike_recording_enabled = True
@@ -112,11 +114,11 @@ model.add_synapse_population("InputNeuron", "SPARSE_GLOBALG", 0,
                                      "DeltaCurr", {}, {},
                                      init_connectivity("OneToOne", {}))
 
-model.add_synapse_population("high_to_low", "SPARSE_INDIVIDUALG", 0,
-                             src_neuron_pop, tgt_neuron_pop,
-                             "StaticPulse", {}, {"g": -1400.0}, {}, {},
-                             "DeltaCurr", {}, {},
-                             init_connectivity("OneToOne", {}))
+# model.add_synapse_population("high_to_low", "SPARSE_INDIVIDUALG", 0,
+#                              src_neuron_pop, tgt_neuron_pop,
+#                              "StaticPulse", {}, {"g": -1400.0}, {}, {},
+#                              "DeltaCurr", {}, {},
+#                              init_connectivity("OneToOne", {}))
                             
 # Weight matrices
 height_up_weight_vector = np.linspace(1, 0, height)
@@ -178,8 +180,6 @@ v_view_down = down_neuron.vars["V"].view
 v_view_left = left_neuron.vars["V"].view
 v_view_right = right_neuron.vars["V"].view
 
-#spikes_history = input_pop.vars["current_spikes"].view
-
 v_all = [v_view_up, v_view_down, v_view_left, v_view_right]
 
 step_size = 100 
@@ -190,67 +190,26 @@ with USBInput((height, width), device="genn") as stream:
     with laser.Laser() as l :
         l.on()
         state = (2000, 2000)
-
+        l.blink(10)
+        l.move(*state)
         time_start = time.time()
         # Loop forever
         while True:
-            #print(stream)
             for i in range(10):
                 stream.read_genn(input_pop.extra_global_params["input"].view)
-                #print("1ms time window with ", np.count_nonzero(input_pop.extra_global_params["input"].view), " events")
 
-                #print(input_pop.extra_global_params["input"].view)
-                #input_pop.push_extra_global_param_to_device("input")
                 input_pop.push_extra_global_param_to_device("input")
                 model.step_time()
                 time.sleep(check_time)
-                moving = False
-                #print(model.pull_prev_spikes_from_device("input"))
-                #model.pull_recording_buffers_from_device()
-                #print(model.pull_current_spikes_from_device("input"))
-
-                #print(model.pull_current_spike_events_from_device("input"))
-                #print(model.pull_spike_events_from_device("input"))
-                #print(model.pull_spikes_times_from_device("input"))
-                """ for j,neuron in enumerate(arrow_neurons) :
-                if model.pull_spikes_from_device(neuron) :
-                    print("spiking " + neuron)
-                    state = (max(0,min(4095,state[0]+moves[j][0])), max(0,min(4095,state[1]+moves[j][1])))
-                    moving = True
-            
-            if moving :
-                print(state)
-                l.move(*state) """
+            moving = False
             
             model.pull_recording_buffers_from_device()
-            """ 
-            spike_times, spike_ids = input_pop.spike_recording_data
-            spike_x = spike_ids % 640
-            spike_y = spike_ids // 640
-            print(spike_x)
-            print(spike_y)
-            print(spike_times) """
             spike_times, spike_ids = src_neuron_pop.spike_recording_data
             spike_x = spike_ids % 640
             spike_y = spike_ids // 640
-            """ print(spike_x)
-            print(spike_y)
-            print(spike_times) """
-            """ spike_times, spike_ids = filter_low_pop.spike_recording_data
-            spike_x = spike_ids % 640
-            spike_y = spike_ids // 640
-            print(spike_x)
-            print(spike_y)
-            print(spike_times)
-            spike_times, spike_ids = up_neuron.spike_recording_data
 
-            spike_x = spike_ids % 640
-            spike_y = spike_ids // 640
-            print(spike_x)
-            print(spike_y)
-            print(spike_times) """
             up_times, up_ids = up_neuron.spike_recording_data
-            for j,neuron in enumerate(arrow_neurons) :
+            for j, neuron in enumerate(arrow_neurons) :
                 s_times, s_ids = neuron.spike_recording_data
                 if len(s_ids) :
                     print("spiking ")
