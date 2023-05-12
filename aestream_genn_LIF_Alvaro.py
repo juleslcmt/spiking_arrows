@@ -20,7 +20,7 @@ genn_input_model = create_custom_neuron_class(
     is_auto_refractory_required=False)
 
 # Resonate and fire neuron model
-model = GeNNModel("float", "usb_genn")
+model = GeNNModel("float", "usb_genn", backend="SingleThreadedCPU")
 #model.dT = 0.1
 
 # Neuron parameters
