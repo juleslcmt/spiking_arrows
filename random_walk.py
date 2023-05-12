@@ -19,7 +19,8 @@ output_params = {"C": 1.0, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vrese
 LIF_init = {'RefracTime': 0, 'V': -65}
 
 # Setting frequencies and target position
-simtime = 1000
+simtime = 5000
+time_change_pos = 100
 target_frequency = 1000/10000
 source_frequency = 1000/5000
 
@@ -37,7 +38,7 @@ source_cord_x = np.random.randint(width)
 source_cord_y = np.random.randint(height)
 
 start_time = 0
-end_time = 10
+end_time = time_change_pos
 new_spikes = np.arange(start_time, end_time, source_frequency)
 spike_times.append(new_spikes)
 
@@ -49,7 +50,7 @@ end_spikes[source_cord_x + source_cord_y * width] = end_index
 points = [[source_cord_x, source_cord_y, start_time, end_time]]
 
 # Random walk
-for i in range(99):
+for i in range(simtime // time_change_pos):
 	decision = np.random.randint(4) # 0 -> Up, 1 -> Down, 2 -> Left, 3 -> Right
 	
 	if decision == 0 and source_cord_y != 0:
@@ -62,7 +63,7 @@ for i in range(99):
 		source_cord_x += 1
 		
 	start_time = end_time
-	end_time += 10
+	end_time += time_change_pos
 	new_spikes = np.arange(start_time, end_time, source_frequency)
 	spike_times.append(new_spikes)
 
@@ -109,7 +110,7 @@ model.add_synapse_population("input_to_low_filter", "SPARSE_GLOBALG", 0,
                              
 model.add_synapse_population("high_to_low", "SPARSE_GLOBALG", 0,
                              filter_high_pop, filter_low_pop,
-                             "StaticPulse", {}, {"g": -1400.0}, {}, {},
+                             "StaticPulse", {}, {"g": -140.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
@@ -175,13 +176,13 @@ model.add_synapse_population("inhibitory_right_neuron", "DENSE_INDIVIDUALG", 0,
 
 # Build and simulate
 model.build()
-model.load(num_recording_timesteps=100)
+model.load(num_recording_timesteps=time_change_pos)
 
 all_spikes = []
 while model.t < simtime:
 	model.step_time()
     
-	if model.t % 10 == 0:
+	if model.t % time_change_pos == 0:
 		model.pull_recording_buffers_from_device()
 
 		filter_high_spike_times, filter_high_ids = filter_high_pop.spike_recording_data
@@ -217,43 +218,39 @@ fig2 = plt.figure()
 
 ax0 = fig2.add_subplot(611)
 filter_high_plot, = ax0.plot(all_spikes[0][0], all_spikes[0][1], markersize=2)
-ax0.set_xlim(0, simtime)
 ax0.set_xlabel("time [ms]")
 ax0.set_ylim((0, width*height))
 ax0.set_title("Filter High")
 
 ax1 = fig2.add_subplot(612)
 filter_low_plot, = ax1.plot(all_spikes[0][2], all_spikes[0][3], markersize=4)
-ax1.set_xlim(0, simtime)
 ax1.set_xlabel("time [ms]")
 ax1.set_ylim((0, width*height))
 ax1.set_title("Filter Low")
 
 ax2 = fig2.add_subplot(613)
 up_plot = ax2.vlines(all_spikes[0][4], ymin=0, ymax=1, color="red", linestyle="--")
-ax2.set_xlim(0, simtime)
 ax2.set_xlabel("time [ms]")
 ax2.set_title("Up neuron")
 
 ax3 = fig2.add_subplot(614)
 down_plot = ax3.vlines(all_spikes[0][5], ymin=0, ymax=1, color="red", linestyle="--")
-ax3.set_xlim(0, simtime)
 ax3.set_xlabel("time [ms]")
 ax3.set_title("Down neuron")
 
 ax4 = fig2.add_subplot(615)
 left_plot = ax4.vlines(all_spikes[0][6], ymin=0, ymax=1, color="red", linestyle="--")
-ax4.set_xlim(0, simtime)
 ax4.set_xlabel("time [ms]")
 ax4.set_title("Left neuron")
 
 ax5 = fig2.add_subplot(616)
 right_plot = ax5.vlines(all_spikes[0][7], ymin=0, ymax=1, color="red", linestyle="--")
-ax5.set_xlim(0, simtime)
 ax5.set_xlabel("time [ms]")
 ax5.set_title("Right neuron")
 
-for i in range(99):
+start_time = 0
+end_time = time_change_pos * 10
+for i in range(simtime // time_change_pos):
 	source_plot.set_xdata(points[i][0])
 	source_plot.set_ydata(points[i][1])
 	
@@ -265,6 +262,17 @@ for i in range(99):
 	down_plot.set_segments([np.array([[t, 0], [t, 1]]) for t in all_spikes[i][5]])
 	left_plot.set_segments([np.array([[t, 0], [t, 1]]) for t in all_spikes[i][6]])
 	right_plot.set_segments([np.array([[t, 0], [t, 1]]) for t in all_spikes[i][7]])
+	
+	if i % 10 == 0:
+		ax0.set_xlim(start_time, end_time)
+		ax1.set_xlim(start_time, end_time)
+		ax2.set_xlim(start_time, end_time)
+		ax3.set_xlim(start_time, end_time)
+		ax4.set_xlim(start_time, end_time)
+		ax5.set_xlim(start_time, end_time)
+		
+		start_time = end_time
+		end_time += time_change_pos * 10
 	
 	fig.canvas.draw()
 	fig.canvas.flush_events()
