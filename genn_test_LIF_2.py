@@ -4,21 +4,21 @@ from pygenn.genn_model import GeNNModel, init_connectivity
 from helper_functions import *
 
 # Resolution
-width = 640 // 10
-height = 480 // 10
+width = 640
+height = 480
 
 # Resonate and fire neuron model
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
-model.dT = 0.01
+model.dT = 0.1
 sim_time = 200
 timesteps = int(sim_time / model.dT)
 
 # Neuron parameters
-filter_high_params = {"C": 1.0, "TauM": 0.1, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5,
-                      'Ioffset': 0}
-filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5,
-                     'Ioffset': 0}
-output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.95,
+filter_source_params = {"C": 1.0, "TauM": 0.1, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5,
+                        'Ioffset': 0}
+filter_target_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5,
+                        'Ioffset': 0}
+output_params = {"C": 1.0, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -54.5,
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
 
@@ -28,10 +28,10 @@ RAF_init = {"V": 0.0, "U": 0.0}
 
 # Mapping input spikes (test)
 frequencies = [100, 300]
-target_neuron_ij = (36, 32)
-source_neuron_ij = (36, 60)
-source_neuron = np.ravel_multi_index(source_neuron_ij, (height, width))
-target_neuron = np.ravel_multi_index(target_neuron_ij, (height, width))
+source_neuron_ij = (10, 10)
+target_neuron_ij = (20, 10)
+source_neuron = np.ravel_multi_index(source_neuron_ij, (width, height))
+target_neuron = np.ravel_multi_index(target_neuron_ij, (width, height))
 spike_times = []
 for f in frequencies:
     spike_times.append(generate_spike_times_frequency(0, 100, f))
@@ -48,13 +48,13 @@ input_matrix[target_neuron_ij] = frequencies[1]
 # Network architecture
 filter_target_pop = model.add_neuron_population("filter_high_pop",
                                                 width * height,
-                                                raf_model(),
-                                                RAF_target_params, RAF_init)
+                                                "LIF",
+                                                filter_source_params, LIF_init)
 filter_target_pop.spike_recording_enabled = True
 filter_source_pop = model.add_neuron_population("filter_low_pop",
                                                 width * height,
-                                                raf_model(),
-                                                RAF_source_params, RAF_init)
+                                                "LIF",
+                                                filter_target_params, LIF_init)
 filter_source_pop.spike_recording_enabled = True
 
 up_neuron = model.add_neuron_population("up_neuron", 1, "LIF", output_params, LIF_init)
@@ -67,15 +67,21 @@ left_neuron.spike_recording_enabled = True
 right_neuron.spike_recording_enabled = True
 
 # Input to filter matrices
-model.add_synapse_population("input_to_target_filter", "SPARSE_GLOBALG", 0,
+model.add_synapse_population("input_to_high_filter", "SPARSE_GLOBALG", 0,
                              input_pop, filter_target_pop,
                              "StaticPulse", {}, {"g": 70.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
-model.add_synapse_population("input_to_source_filter", "SPARSE_GLOBALG", 0,
+model.add_synapse_population("input_to_low_filter", "SPARSE_GLOBALG", 0,
                              input_pop, filter_source_pop,
                              "StaticPulse", {}, {"g": 70.0}, {}, {},
+                             "DeltaCurr", {}, {},
+                             init_connectivity("OneToOne", {}))
+
+model.add_synapse_population("high_to_low", "SPARSE_GLOBALG", 0,
+                             filter_target_pop, filter_source_pop,
+                             "StaticPulse", {}, {"g": -1400.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
@@ -121,22 +127,22 @@ model.add_synapse_population("excitatory_right_neuron", "DENSE_INDIVIDUALG", 0,
 # Filter low to directional neurons
 model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_source_pop, up_neuron,
-                             "StaticPulse", {}, {"g": -5 * height_up_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
 model.add_synapse_population("inhibitory_down_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_source_pop, down_neuron,
-                             "StaticPulse", {}, {"g": -5 * height_down_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * height_down_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
 model.add_synapse_population("inhibitory_left_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_source_pop, left_neuron,
-                             "StaticPulse", {}, {"g": -5 * width_left_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * width_left_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
 model.add_synapse_population("inhibitory_right_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_source_pop, right_neuron,
-                             "StaticPulse", {}, {"g": -5 * width_right_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * width_right_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
 # Build and simulate
@@ -162,7 +168,7 @@ right_spike_times, _ = right_neuron.spike_recording_data
 fig, axes = plt.subplots(3, 1, figsize=(15, 15), sharex=True)
 t = np.arange(0.0, sim_time, model.dT)
 cax = axes[0].matshow(input_matrix)
-# axes[0].legend(['Source', 'Target'])
+axes[0].legend(['Source', 'Target'])
 fig.colorbar(cax)
 axes[1].scatter(filter_target_spike_times, target_spike_ids, color='red', s=4, label='Excitatory')
 axes[1].scatter(filter_source_spike_times, source_spike_ids, color='blue', s=4, label='Inhibitory')
