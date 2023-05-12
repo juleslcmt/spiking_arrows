@@ -26,15 +26,15 @@ source_frequency = 1000/5000
 start_spikes = [0 for i in range(height*width)]
 end_spikes = [0 for i in range(height*width)]
 
-target_cord_x = np.random.randint(width - 1)
-target_cord_y = np.random.randint(height - 1)
+target_cord_x = np.random.randint(width)
+target_cord_y = np.random.randint(height)
 spike_times = [np.arange(0, simtime, target_frequency)]
 end_index = len(spike_times[0])
 end_spikes[target_cord_x + target_cord_y * width] = end_index
 
 # Source start position
-source_cord_x = np.random.randint(width - 1)
-source_cord_y = np.random.randint(height - 1)
+source_cord_x = np.random.randint(width)
+source_cord_y = np.random.randint(height)
 
 start_time = 0
 end_time = 10
@@ -50,7 +50,7 @@ points = [[source_cord_x, source_cord_y, start_time, end_time]]
 
 # Random walk
 for i in range(99):
-	decision = np.random.randint(3) # 0 -> Up, 1 -> Down, 2 -> Left, 3 -> Right
+	decision = np.random.randint(4) # 0 -> Up, 1 -> Down, 2 -> Left, 3 -> Right
 	
 	if decision == 0 and source_cord_y != 0:
 		source_cord_y += -1
@@ -231,21 +231,25 @@ ax1.set_title("Filter Low")
 
 ax2 = fig2.add_subplot(613)
 up_plot = ax2.vlines(all_spikes[0][4], ymin=0, ymax=1, color="red", linestyle="--")
+ax2.set_xlim(0, simtime)
 ax2.set_xlabel("time [ms]")
 ax2.set_title("Up neuron")
 
 ax3 = fig2.add_subplot(614)
 down_plot = ax3.vlines(all_spikes[0][5], ymin=0, ymax=1, color="red", linestyle="--")
+ax3.set_xlim(0, simtime)
 ax3.set_xlabel("time [ms]")
 ax3.set_title("Down neuron")
 
 ax4 = fig2.add_subplot(615)
 left_plot = ax4.vlines(all_spikes[0][6], ymin=0, ymax=1, color="red", linestyle="--")
+ax4.set_xlim(0, simtime)
 ax4.set_xlabel("time [ms]")
 ax4.set_title("Left neuron")
 
 ax5 = fig2.add_subplot(616)
 right_plot = ax5.vlines(all_spikes[0][7], ymin=0, ymax=1, color="red", linestyle="--")
+ax5.set_xlim(0, simtime)
 ax5.set_xlabel("time [ms]")
 ax5.set_title("Right neuron")
 
@@ -257,10 +261,10 @@ for i in range(99):
 	filter_high_plot.set_ydata(all_spikes[i][1])
 	filter_low_plot.set_xdata(all_spikes[i][2])
 	filter_low_plot.set_ydata(all_spikes[i][3])
-	'''up_plot.set_xdata(all_spikes[i][4])
-	down_plot.set_xdata(all_spikes[i][5])
-	left_plot.set_xdata(all_spikes[i][6])
-	right_plot.set_xdata(all_spikes[i][7])'''
+	up_plot.set_segments([np.array([[t, 0], [t, 1]]) for t in all_spikes[i][4]])
+	down_plot.set_segments([np.array([[t, 0], [t, 1]]) for t in all_spikes[i][5]])
+	left_plot.set_segments([np.array([[t, 0], [t, 1]]) for t in all_spikes[i][6]])
+	right_plot.set_segments([np.array([[t, 0], [t, 1]]) for t in all_spikes[i][7]])
 	
 	fig.canvas.draw()
 	fig.canvas.flush_events()
