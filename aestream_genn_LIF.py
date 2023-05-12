@@ -9,7 +9,7 @@ from aestream import USBInput
 import time
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
-check_time = 0.001 
+check_time = 0.001
 
 # Downscaled resolution
 width = 640
@@ -25,12 +25,12 @@ genn_input_model = create_custom_neuron_class(
 
 # Resonate and fire neuron model
 model = GeNNModel("float", "usb_genn")
-model.dT = check_time
+model.dT = 0.001
 
 # Neuron parameters
-filter_high_params = {"C": 1.0, "TauM": 1.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -57.0, 'Ioffset': 0}
+filter_high_params = {"C": 1.0, "TauM": 0.1, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
 filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
-output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.95,
+output_params = {"C": 1.0, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -54.5,
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
 
@@ -52,9 +52,9 @@ input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourc
 input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times, axis=None))
 input_pop.spike_recording_enabled = True"""
 
-model = GeNNModel("float", "usb_genn")
+model = GeNNModel("float", "usb_genn", backend="CUDA")
 input_pop = model.add_neuron_population("input", width * height, genn_input_model, {}, {})
-input_pop.set_extra_global_param("input", np.empty(9600, dtype=np.uint32))
+input_pop.set_extra_global_param("input", np.empty(307200, dtype=np.uint32))
 input_pop.spike_recording_enabled = True
 
 # Network architecture
@@ -92,14 +92,22 @@ model.add_synapse_population("high_to_low", "SPARSE_INDIVIDUALG", 0,
                              init_connectivity("OneToOne", {}))
 
 # Weight matrices
-height_up_weight_vector = np.linspace(1, 0, height)
+max_weight_v = height*10
+min_weight_v = height
+max_weight_h = width*10
+min_weight_h = width
+
+height_up_weight_vector = np.linspace(max_weight_v, min_weight_v, height)
 height_up_weight_matrix = np.tile(height_up_weight_vector, (width, 1)).T.reshape((height * width,))
-height_down_weight_vector = np.linspace(0, 1, height)
+
+height_down_weight_vector = np.linspace(min_weight_v, max_weight_v, height)
 height_down_weight_matrix = np.tile(height_down_weight_vector, (width, 1)).T.reshape((height * width,))
-width_right_weight_vector = np.linspace(0, 1, width)
-width_right_weight_matrix = np.tile(width_right_weight_vector, (1, height)).T.reshape((height * width,))
-width_left_weight_vector = np.linspace(1, 0, width)
+
+width_left_weight_vector = np.linspace(max_weight_h, min_weight_h, width)
 width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.reshape((height * width,))
+
+width_right_weight_vector = np.linspace(min_weight_h, max_weight_h, width)
+width_right_weight_matrix = np.tile(width_right_weight_vector, (1, height)).T.reshape((height * width,))
 
 # Excitatory and inhibitory matrices to directional neurons
 model.add_synapse_population("excitatory_up_neuron", "DENSE_INDIVIDUALG", 0,
@@ -109,7 +117,7 @@ model.add_synapse_population("excitatory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              
 model.add_synapse_population("inhibitory_up_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, up_neuron,
-                             "StaticPulse", {}, {"g": -1 * height_up_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * height_up_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("excitatory_down_neuron", "DENSE_INDIVIDUALG", 0,
@@ -119,7 +127,7 @@ model.add_synapse_population("excitatory_down_neuron", "DENSE_INDIVIDUALG", 0,
                              
 model.add_synapse_population("inhibitory_down_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, down_neuron,
-                             "StaticPulse", {}, {"g": -1 * height_down_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * height_down_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("excitatory_left_neuron", "DENSE_INDIVIDUALG", 0,
@@ -129,7 +137,7 @@ model.add_synapse_population("excitatory_left_neuron", "DENSE_INDIVIDUALG", 0,
                              
 model.add_synapse_population("inhibitory_left_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, left_neuron,
-                             "StaticPulse", {}, {"g": -1 * width_left_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * width_left_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
                              
 model.add_synapse_population("excitatory_right_neuron", "DENSE_INDIVIDUALG", 0,
@@ -139,7 +147,7 @@ model.add_synapse_population("excitatory_right_neuron", "DENSE_INDIVIDUALG", 0,
                              
 model.add_synapse_population("inhibitory_right_neuron", "DENSE_INDIVIDUALG", 0,
                              filter_low_pop, right_neuron,
-                             "StaticPulse", {}, {"g": -1 * width_right_weight_matrix}, {}, {},
+                             "StaticPulse", {}, {"g": -1.25 * width_right_weight_matrix}, {}, {},
                              "DeltaCurr", {}, {})
 
 # Build and simulate
@@ -155,23 +163,27 @@ v_view_right = right_neuron.vars["V"].view
 
 v_all = [v_view_up, v_view_down, v_view_left, v_view_right]
 
-step_size = 100 
+step_size = 10
 arrow_neurons = [up_neuron,down_neuron,left_neuron,right_neuron]
 moves = [(-step_size, 0), (step_size, 0), (0, -step_size), (0, step_size)]
 
-with USBInput((height, width), device="genn") as stream:
+with USBInput((640, 480), device="genn") as stream :
     with laser.Laser() as l :
         l.on()
+        l.blink(10)
         state = (2000, 2000)
-
+        l.move(*state)
+        count = 0
+        high_total, low_total = 0,0
         time_start = time.time()
         # Loop forever
         while True:
             #print(stream)
             for i in range(10):
+                
+                input_pop.extra_global_params["input"].view.reshape((640,480))
                 stream.read_genn(input_pop.extra_global_params["input"].view)
-                #print("1ms time window with ", np.count_nonzero(input_pop.extra_global_params["input"].view), " events")
-
+                #print("1s time window with ", np.count_nonzero(input_pop.extra_global_params["input"].view), " events")
                 #print(input_pop.extra_global_params["input"].view)
                 #input_pop.push_extra_global_param_to_device("input")
                 input_pop.push_extra_global_param_to_device("input")
@@ -196,42 +208,47 @@ with USBInput((height, width), device="genn") as stream:
                 l.move(*state) """
             
             model.pull_recording_buffers_from_device()
-            """ 
-            spike_times, spike_ids = input_pop.spike_recording_data
-            spike_x = spike_ids % 640
-            spike_y = spike_ids // 640
-            print(spike_x)
-            print(spike_y)
-            print(spike_times) """
-            spike_times, spike_ids = filter_high_pop.spike_recording_data
-            spike_x = spike_ids % 640
-            spike_y = spike_ids // 640
-            """ print(spike_x)
-            print(spike_y)
-            print(spike_times) """
-            """ spike_times, spike_ids = filter_low_pop.spike_recording_data
-            spike_x = spike_ids % 640
-            spike_y = spike_ids // 640
-            print(spike_x)
-            print(spike_y)
-            print(spike_times)
-            spike_times, spike_ids = up_neuron.spike_recording_data
+            high_times, high_ids = filter_high_pop.spike_recording_data
+            low_times, low_ids = filter_low_pop.spike_recording_data
+            #spike_x = spike_ids % 640
+            #spike_y = spike_ids // 640
+            #[(x,y) for (x,y) in zip(spike_x,spike_y)])
+            count += 1
+            high_total += len(high_ids)
+            low_total += len(low_ids)
 
-            spike_x = spike_ids % 640
-            spike_y = spike_ids // 640
-            print(spike_x)
-            print(spike_y)
-            print(spike_times) """
-            up_times, up_ids = up_neuron.spike_recording_data
+            #print("high filter number :", high_total/count)
+            #print("low filter number :", low_total/count)
+            
+            #print(spike_times)
+
+
             for j,neuron in enumerate(arrow_neurons) :
                 s_times, s_ids = neuron.spike_recording_data
                 if len(s_ids) :
-                    print("spiking ")
-                    state = (max(0,min(4095,state[0]+moves[j][0])), max(0,min(4095,state[1]+moves[j][1])))
+                    #print("spiking")
+                    #print(s_times)
+                    state = (max(0,min(4095,state[0]+len(s_ids)*moves[j][0])), max(0,min(4095,state[1]+len(s_ids)*moves[j][1])))
                     moving = True
             if moving :
-                print(state)
+                #print(state)
                 l.move(*state)
+            #print((time.time() - time_start))
+            if (time.time() - time_start) > 10 :
+                '''print("plotting")
+                fig, axis = plt.subplots(2,1)'''
+                high_times, high_ids = filter_high_pop.spike_recording_data
+                low_times, low_ids = filter_low_pop.spike_recording_data
+                spike_x = high_ids % 640
+                spike_y = high_ids // 640
+                print(high_ids)
+                time_start = time.time()
+                '''low_x = low_ids % 640
+                low_y = low_ids // 640
+                axis[0].scatter(spike_x, spike_y, s=1, c='green')
+                axis[1].scatter(low_x, low_y, s=1, c='red')
+                plt.show()
+                time.sleep(20)'''
 
 
 

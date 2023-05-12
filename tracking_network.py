@@ -69,6 +69,8 @@ omega = 300
 rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
 rf_init = {"V": 0.0, "U": 0.0}
 
+LIF_init = {'RefracTime': 0, 'V': -65}
+
 # Neuron parameters
 filter_high_params = {"C": 1.0, "TauM": 1.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -57.0, 'Ioffset': 0}
 filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
