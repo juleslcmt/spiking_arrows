@@ -3,22 +3,22 @@ import numpy as np
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
 # Resolution
-width = 640
-height = 480
+width = 4
+height = 3
 
 # Resonate and fire neuron model
 model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
 model.dT = 0.1
 
 # Neuron parameters
-filter_high_params = {"C": 1.0, "TauM": 1.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -48.0, 'Ioffset': 0}
+filter_high_params = {"C": 1.0, "TauM": 0.1, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
 filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
 output_params = {"C": 0.1, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.95,
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
 
 # Mapping input spikes (test)
-spike_times = [np.arange(0, 100, 1000/2000), np.arange(0, 200, 1000/3000), np.arange(100, 200, 1000/2000)] 
+spike_times = [np.arange(0, 100, 1000/5000), np.arange(0, 200, 1000/10000), np.arange(100, 200, 1000/5000)] 
 len_spike_times = [len(x) for x in spike_times]
 
 start_spikes = [0 for i in range(height*width)]
@@ -27,8 +27,8 @@ end_spikes = [0 for i in range(height*width)]
 end_spikes[0] = len_spike_times[0]
 start_spikes[width-1] = len_spike_times[0]
 end_spikes[width-1] = len_spike_times[0] + len_spike_times[1]
-start_spikes[width*5-1] = len_spike_times[0] + len_spike_times[1]
-end_spikes[width*5-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
+#start_spikes[width*3-1] = len_spike_times[0] + len_spike_times[1]
+#end_spikes[width*3-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
 
 input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
@@ -70,13 +70,13 @@ model.add_synapse_population("high_to_low", "SPARSE_GLOBALG", 0,
                              init_connectivity("OneToOne", {}))
 
 # Weight matrices
-height_up_weight_vector = np.linspace(height, 0, height)
+height_up_weight_vector = np.linspace(1, 0, height)
 height_up_weight_matrix = np.tile(height_up_weight_vector, (width, 1)).T.reshape((height * width,))
-height_down_weight_vector = np.linspace(0, height, height)
+height_down_weight_vector = np.linspace(0, 1, height)
 height_down_weight_matrix = np.tile(height_down_weight_vector, (width, 1)).T.reshape((height * width,))
-width_right_weight_vector = np.linspace(0, width, width)
+width_right_weight_vector = np.linspace(0, 1, width)
 width_right_weight_matrix = np.tile(width_right_weight_vector, (1, height)).T.reshape((height * width,))
-width_left_weight_vector = np.linspace(width, 0, width)
+width_left_weight_vector = np.linspace(1, 0, width)
 width_left_weight_matrix = np.tile(width_left_weight_vector, (1, height)).T.reshape((height * width,))
 
 # Excitatory and inhibitory matrices to directional neurons
@@ -151,24 +151,29 @@ timesteps = np.arange(0.0, 200.0, model.dT)
 fig, axes = plt.subplots(6,1)
 axes[0].scatter(filter_high_spike_times, excitatory_ids,s=4)
 axes[0].set_xlabel("time [ms]")
+axes[0].set_xlim((0, 200))
 axes[0].set_ylim((0, width*height))
+axes[0].set_title("Filter High")
 axes[1].scatter(filter_low_spike_times, inhibitory_ids,s=4)
 axes[1].set_xlabel("time [ms]")
+axes[1].set_xlim((0, 200))
 axes[1].set_ylim((0, width*height))
+axes[1].set_title("Filter Low")
 axes[2].vlines(up_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[2].set_xlabel("time [ms]")
 axes[2].set_xlim((0, 200))
-axes[2].set_ylim((0, 4))
+axes[2].set_title("Up neuron")
 axes[3].vlines(down_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[3].set_xlabel("time [ms]")
 axes[3].set_xlim((0, 200))
-axes[3].set_ylim((0, 4))
+axes[3].set_title("Down neuron")
 axes[4].vlines(left_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[4].set_xlabel("time [ms]")
 axes[4].set_xlim((0, 200))
-axes[4].set_ylim((0, 4))
+axes[4].set_title("Left neuron")
 axes[5].vlines(right_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
 axes[5].set_xlabel("time [ms]")
 axes[5].set_xlim((0, 200))
-axes[5].set_ylim((0, 4))
+axes[5].set_title("Right neuron")
+plt.tight_layout()
 plt.show()
