@@ -13,7 +13,7 @@ model.dT = 0.1
 # Neuron parameters
 filter_high_params = {"C": 1.0, "TauM": 0.1, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
 filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
-output_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.95,
+output_params = {"C": 1.0, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -54.5,
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
 
@@ -24,11 +24,11 @@ len_spike_times = [len(x) for x in spike_times]
 start_spikes = [0 for i in range(height*width)]
 end_spikes = [0 for i in range(height*width)]
 
-end_spikes[0] = len_spike_times[0]
+end_spikes[width-1-64] = len_spike_times[0]
 start_spikes[width-1] = len_spike_times[0]
 end_spikes[width-1] = len_spike_times[0] + len_spike_times[1]
-start_spikes[width*int(height/4)-1] = len_spike_times[0] + len_spike_times[1]
-end_spikes[width*int(height/4)-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
+start_spikes[width*48-1] = len_spike_times[0] + len_spike_times[1]
+end_spikes[width*48-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
 
 input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
                                         {"startSpike": start_spikes, "endSpike": end_spikes})
