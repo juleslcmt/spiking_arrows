@@ -1,82 +1,7 @@
 import matplotlib.pyplot as plt
-import numpy as np
-from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
+from pygenn.genn_model import GeNNModel, init_connectivity
 
-# Resonate and fire neuron model
-rf_matlab_model = create_custom_neuron_class(
-    "RF",
-    param_names=["Damp", "Omega"],
-    var_name_types=[("V", "scalar"), ("U", "scalar")],
-    support_code=
-    """
-    SUPPORT_CODE_FUNC scalar dudt( scalar U, scalar Damp, scalar Omega, scalar Isyn, scalar V ){
-    return (Isyn - (2.0 * Damp * U) - (Omega * Omega * V) );
-    }
-    """,
-    sim_code=
-    """
-    const scalar oldV = $(V);
-    
-    $(V) +=  DT * $(U);
-    
-    const scalar k1 = dudt( $(U), $(Damp), $(Omega), $(Isyn), oldV );
-    const scalar k2 = dudt( $(U) + DT * k1 / 2, $(Damp), $(Omega), $(Isyn), oldV );
-    const scalar k3 = dudt( $(U) + DT * k2 / 2, $(Damp), $(Omega), $(Isyn), oldV );
-    const scalar k4 = dudt( $(U) + DT * k3, $(Damp), $(Omega), $(Isyn), oldV );
-    $(U) += DT * ( k1 + 2 * k2 + 2 * k3 + k4 ) / 6;
-    
-    if ( $(V) > 1.0 ) {
-    $(V) = 1.0;
-    }
-    """,
-    threshold_condition_code=
-    """
-    $(V) >= 0.99
-    """,
-    reset_code=
-    """
-    """)
-
-
-def generate_spike_times_frequency(start_time, end_time, frequency):
-    end_time /= 1000
-
-    sample_rate = 100000
-    amplitude = 1
-    theta = 0
-
-    time = np.arange(start_time, end_time, 1 / sample_rate)
-    sinewave = amplitude * np.sin(2 * np.pi * frequency * time + theta)
-    # local min
-    maxima = (np.diff(np.sign(np.diff(sinewave))) < 0).nonzero()[0] + 1  # local max
-
-    return time[maxima] * 1000
-
-
-def set_input_frequency(spiking_neurons, spike_times):
-    num_neurons = len(spiking_neurons)
-
-    start_spikes = np.zeros(num_neurons)
-    end_spikes = np.zeros(num_neurons)
-
-    spikes = []
-    e = 0
-    t = 0
-    for i in range(num_neurons):
-        if i in spiking_neurons:
-            spikes.extend(spike_times[t])
-            start_spikes[i] = e
-            e += len(spike_times[t])
-            end_spikes[i] = e
-            t += 1
-        else:
-            start_spikes[i] = e
-            end_spikes[i] = e
-
-    spikes = np.array(spikes)
-    spikes = np.squeeze(spikes)
-
-    return spikes, start_spikes, end_spikes
+from helper_functions import *
 
 
 def run_raf_model(input_frequency, plot=False):
@@ -92,11 +17,11 @@ def run_raf_model(input_frequency, plot=False):
         model.dT = dt
         timesteps = int(sim_time / model.dT)
 
-        neuron_pop = model.add_neuron_population("Neuron", 1, rf_matlab_model, rf_params, rf_init)
+        neuron_pop = model.add_neuron_population("Neuron", 1, raf_model(), rf_params, rf_init)
         neuron_pop.spike_recording_enabled = True
 
         spike_times = generate_spike_times_frequency(0, 100, f)
-        spike_times, start_spikes, end_spikes = set_input_frequency([0], [spike_times])
+        spike_times, start_spikes, end_spikes = set_input_frequency([0], [spike_times], 1)
 
         input_pop = model.add_neuron_population("Input", 1, "SpikeSourceArray", {},
                                                 {"startSpike": start_spikes, "endSpike": end_spikes})
@@ -146,17 +71,19 @@ def run_raf_model(input_frequency, plot=False):
     ax.plot(input_frequencies, spikes_at_frequency, "o")
     ax.set_xlim([np.min(input_frequencies), np.max(input_frequencies)])
     ax.set_title(f"Number of spikes of RAF neuron centred around {input_frequency} Hz")
+    ax.set_xlabel("Input frequency [Hz]")
+    ax.set_ylabel("Number of spikes")
     # plt.xticks(input_frequencies)
     fig.show()
 
 
 sim_time = 200
 dt = 0.01
-omega = 100
-input_frequency = 100
+omega = 300
+input_frequency = 300
 
 # RAF
-rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
+rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2, 'Vspike': 0.9}
 rf_init = {"V": 0.0, "U": 0.0}
 
 run_raf_model(input_frequency, plot=True)
