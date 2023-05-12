@@ -1,14 +1,27 @@
-import matplotlib.pyplot as plt
 import numpy as np
+import sys
+
+sys.path.append('/opt/spiking_arrows/')
+
+import laser
+from aestream import USBInput
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
-# Resolution
+# Downscaled resolution
 width = 640
 height = 480
 
+genn_input_model = create_custom_neuron_class(
+    "genn_input",
+    extra_global_params=[("input", "uint32_t*")],
+    threshold_condition_code="""
+    $(input)[$(id) / 32] & (1 << ($(id) % 32))
+    """,
+    is_auto_refractory_required=False)
+
 # Resonate and fire neuron model
-model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
-model.dT = 0.1
+model = GeNNModel("float", "usb_genn", backend="SingleThreadedCPU")
+#model.dT = 0.1
 
 # Neuron parameters
 filter_high_params = {"C": 1.0, "TauM": 0.1, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
@@ -17,25 +30,11 @@ output_params = {"C": 1.0, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vrese
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
 
-# Mapping input spikes (test)
-spike_times = [np.arange(0, 100, 1000/5000), np.arange(0, 200, 1000/10000), np.arange(100, 200, 1000/5000)] 
-len_spike_times = [len(x) for x in spike_times]
-
-start_spikes = [0 for i in range(height*width)]
-end_spikes = [0 for i in range(height*width)]
-
-end_spikes[width-1-64] = len_spike_times[0]
-start_spikes[width-1] = len_spike_times[0]
-end_spikes[width-1] = len_spike_times[0] + len_spike_times[1]
-start_spikes[width*48-1] = len_spike_times[0] + len_spike_times[1]
-end_spikes[width*48-1] = len_spike_times[0] + len_spike_times[1] + len_spike_times[2]
-
-input_pop = model.add_neuron_population("input_pop", height * width, "SpikeSourceArray", {},
-                                        {"startSpike": start_spikes, "endSpike": end_spikes})
-input_pop.set_extra_global_param("spikeTimes", np.concatenate(spike_times, axis=None))
+# Network architecture
+input_pop = model.add_neuron_population("input", width * height, genn_input_model, {}, {})
+input_pop.set_extra_global_param("input", np.empty(9600, dtype=np.uint32))
 input_pop.spike_recording_enabled = True
 
-# Network architecture
 filter_high_pop = model.add_neuron_population("filter_high_pop", width * height, "LIF", filter_high_params, LIF_init)
 filter_high_pop.spike_recording_enabled = True
 filter_low_pop = model.add_neuron_population("filter_low_pop", width * height, "LIF", filter_low_params, LIF_init)
@@ -131,58 +130,33 @@ model.add_synapse_population("inhibitory_right_neuron", "DENSE_INDIVIDUALG", 0,
 
 # Build and simulate
 model.build()
-model.load(num_recording_timesteps=2000)
+model.load(num_recording_timesteps=10)
 
-v_view = up_neuron.vars["V"].view
-v = []
-while model.t < 200.0:
-    model.step_time()
-    up_neuron.pull_var_from_device("V")
-    v.append(v_view[0])
+with USBInput((height, width), device="genn") as stream:
+    with laser.Laser() as l :
+        l.on()
+        state = (2000, 2000)
 
-    # if model.t % check_time == 0:
-    #     model.pull_recording_buffers_from_device()
-    #     directional_spikes, _ = up_neuron.spike_recording_data
-    #     print(directional_spikes)
+        while True:
+            for i in range(10):
+                stream.read_genn(input_pop.extra_global_params["input"].view)
+                input_pop.push_extra_global_param_to_device("input")
+                model.step_time()
+            
+            model.pull_recording_buffers_from_device()
+            filter_high_spike_times, filter_high_spike_ids = filter_high_pop.spike_recording_data
+            filter_low_spike_times, filter_low_spike_ids = filter_low_pop.spike_recording_data
+            up_spike_times, up_spike_ids = up_neuron.spike_recording_data
+            down_spike_times, down_spike_ids = down_neuron.spike_recording_data
+            left_spike_times, left_spike_ids = left_neuron.spike_recording_data
+            right_spike_times, right_spike_ids = right_neuron.spike_recording_data
+            
+            up_mov = len(up_spike_times)
+            down_mov = len(down_spike_times)
+            left_mov = len(left_spike_times)
+            right_mov = len(right_spike_times)
+            state = (2000-left_mov+right_mov, 2000+down_mov-up_mov)
+            l.move(*state)
 
-model.pull_recording_buffers_from_device()
 
-filter_high_spike_times, excitatory_ids = filter_high_pop.spike_recording_data
-filter_low_spike_times, inhibitory_ids = filter_low_pop.spike_recording_data
-up_spike_times, _ = up_neuron.spike_recording_data
-down_spike_times, _ = down_neuron.spike_recording_data
-left_spike_times, _ = left_neuron.spike_recording_data
-right_spike_times, _ = right_neuron.spike_recording_data
 
-timesteps = np.arange(0.0, 200.0, model.dT)
-
-# Create figure with 4 axes
-fig, axes = plt.subplots(6,1)
-axes[0].scatter(filter_high_spike_times, excitatory_ids,s=4)
-axes[0].set_xlabel("time [ms]")
-axes[0].set_xlim((0, 200))
-axes[0].set_ylim((0, width*height))
-axes[0].set_title("Filter High")
-axes[1].scatter(filter_low_spike_times, inhibitory_ids,s=4)
-axes[1].set_xlabel("time [ms]")
-axes[1].set_xlim((0, 200))
-axes[1].set_ylim((0, width*height))
-axes[1].set_title("Filter Low")
-axes[2].vlines(up_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
-axes[2].set_xlabel("time [ms]")
-axes[2].set_xlim((0, 200))
-axes[2].set_title("Up neuron")
-axes[3].vlines(down_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
-axes[3].set_xlabel("time [ms]")
-axes[3].set_xlim((0, 200))
-axes[3].set_title("Down neuron")
-axes[4].vlines(left_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
-axes[4].set_xlabel("time [ms]")
-axes[4].set_xlim((0, 200))
-axes[4].set_title("Left neuron")
-axes[5].vlines(right_spike_times, ymin=0, ymax=1, color="red", linestyle="--")
-axes[5].set_xlabel("time [ms]")
-axes[5].set_xlim((0, 200))
-axes[5].set_title("Right neuron")
-plt.tight_layout()
-plt.show()
