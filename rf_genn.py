@@ -85,7 +85,7 @@ def run_raf_model(input_frequency, plot=False):
     input_frequencies = np.random.normal(input_frequency, 10, num_samples)
     input_frequencies.sort()
 
-    fig, axes = plt.subplots(num_samples, 2, figsize=(15, 15))
+    fig, axes = plt.subplots(num_samples // 2, 2, figsize=(15, 15))
     spikes_at_frequency = []
     for f, ax in zip(input_frequencies, axes.flatten()):
         model = GeNNModel("float", "rf", backend="SingleThreadedCPU")
@@ -142,17 +142,18 @@ def run_raf_model(input_frequency, plot=False):
 
     print('Number of spikes at each frequency:')
     print({f: s for f, s in zip(input_frequencies, spikes_at_frequency)})
-    plt.plot(input_frequencies, spikes_at_frequency, "o")
-    plt.xlim([np.min(input_frequencies), np.max(input_frequencies)])
-    plt.title(f"Number of spikes of RAF neuron centred around {input_frequency} Hz")
+    fig, ax = plt.subplots()
+    ax.plot(input_frequencies, spikes_at_frequency, "o")
+    ax.set_xlim([np.min(input_frequencies), np.max(input_frequencies)])
+    ax.set_title(f"Number of spikes of RAF neuron centred around {input_frequency} Hz")
     # plt.xticks(input_frequencies)
-    plt.show()
+    fig.show()
 
 
 sim_time = 200
 dt = 0.01
-omega = 300
-input_frequency = 300
+omega = 100
+input_frequency = 100
 
 # RAF
 rf_params = {"Damp": 0.1, "Omega": omega / 1000 * np.pi * 2}
