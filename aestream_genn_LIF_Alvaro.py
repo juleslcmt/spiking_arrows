@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import sys
 
@@ -6,7 +5,6 @@ sys.path.append('/opt/spiking_arrows/')
 
 import laser
 from aestream import USBInput
-import time
 from pygenn.genn_model import GeNNModel, create_custom_neuron_class, init_connectivity
 
 # Downscaled resolution
