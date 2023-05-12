@@ -13,7 +13,7 @@ model.dT = 0.1
 
 # Neuron parameters
 filter_high_params = {"C": 1.0, "TauM": 0.1, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
-filter_low_params = {"C": 1.0, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -59.5, 'Ioffset': 0}
+filter_low_params = {"C": 0.1, "TauM": 10.0, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -64.5, 'Ioffset': 0}
 output_params = {"C": 1.0, "TauM": 0.5, "TauRefrac": 0.0, "Vrest": -65.0, "Vreset": -65.0, "Vthresh": -54.5,
                  'Ioffset': 0}
 LIF_init = {'RefracTime': 0, 'V': -65}
@@ -110,7 +110,7 @@ model.add_synapse_population("input_to_low_filter", "SPARSE_GLOBALG", 0,
                              
 model.add_synapse_population("high_to_low", "SPARSE_GLOBALG", 0,
                              filter_high_pop, filter_low_pop,
-                             "StaticPulse", {}, {"g": -140.0}, {}, {},
+                             "StaticPulse", {}, {"g": -1400.0}, {}, {},
                              "DeltaCurr", {}, {},
                              init_connectivity("OneToOne", {}))
 
@@ -277,4 +277,4 @@ for i in range(simtime // time_change_pos):
 	fig.canvas.draw()
 	fig.canvas.flush_events()
 
-	time.sleep(0.1)
+	time.sleep(0.5)
